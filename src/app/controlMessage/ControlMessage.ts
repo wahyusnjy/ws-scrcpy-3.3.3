@@ -3,7 +3,7 @@ export interface ControlMessageInterface {
 }
 
 export class ControlMessage {
-    public static TYPE_KEYCODE = 0;
+    public static TYPE_KEYCODE = 100; // UHID keyboard (was 0 for TYPE_INJECT_KEYCODE)
     public static TYPE_TEXT = 1;
     public static TYPE_TOUCH = 2;
     public static TYPE_SCROLL = 3;
@@ -18,7 +18,7 @@ export class ControlMessage {
     public static TYPE_CHANGE_STREAM_PARAMETERS = 101;
     public static TYPE_PUSH_FILE = 102;
 
-    constructor(readonly type: number) {}
+    constructor(readonly type: number) { }
 
     public toBuffer(): Buffer {
         throw Error('Not implemented');

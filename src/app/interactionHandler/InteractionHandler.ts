@@ -517,17 +517,54 @@ export abstract class InteractionHandler {
         }
         const messages: TouchControlMessage[] = [];
         const points: Point[] = [];
+        console.log(logPrefix, 'Event:', e.type, 'Touches count:', touches.length);
         this.clearCanvas();
-        touches.forEach((touch: Touch, pointerId: number) => {
+        touches.forEach((touch: Touch) => {
             const { action, buttons, position } = touch;
+            // For mouse events, use pointerId = -1 (POINTER_ID_MOUSE)
+            // For touch events, use index as pointerId
+            const pointerId = -1; // POINTER_ID_MOUSE constant from scrcpy server
             const previous = storage.get(pointerId);
+            console.log(logPrefix, `Touch ${pointerId}:`, {
+                action,
+                actionName: action === MotionEvent.ACTION_DOWN ? 'DOWN' : action === MotionEvent.ACTION_MOVE ? 'MOVE' : 'UP',
+                position: { x: position.point.x, y: position.point.y },
+                invalid: touch.invalid,
+                hasPrevious: !!previous
+            });
             if (!touch.invalid) {
                 let pressure = 1.0;
                 if (action === MotionEvent.ACTION_UP) {
                     pressure = 0;
                 }
-                const message = new TouchControlMessage(action, pointerId, position, pressure, buttons);
-                messages.push(...InteractionHandler.validateMessage(e, message, storage, `${logPrefix}[validate]`));
+                // Calculate actionButton: the button that triggered this action
+                // For ACTION_DOWN: use current buttons (the button being pressed)
+                // For ACTION_UP: use previous buttons (MouseEvent.buttons is 0 after release!)
+                // For ACTION_MOVE: 0 (no button state change)
+                let actionButton = 0;
+                if (action === MotionEvent.ACTION_DOWN) {
+                    actionButton = buttons;  // Current button being pressed
+                } else if (action === MotionEvent.ACTION_UP && previous) {
+                    actionButton = previous.buttons;  // Button that was pressed (now released)
+                }
+                // Override screenSize to physical display (720x1600) instead of video size
+                // This ensures coordinates are correctly mapped on the device
+                const physicalWidth = 720;
+                const physicalHeight = 1600;
+                const videoWidth = position.screenSize.width;
+                const videoHeight = position.screenSize.height;
+
+                // Scale coordinates from video space to physical display space
+                const scaledX = Math.round((position.point.x / videoWidth) * physicalWidth);
+                const scaledY = Math.round((position.point.y / videoHeight) * physicalHeight);
+
+                const scaledPoint = new Point(scaledX, scaledY);
+                const physicalSize = new Size(physicalWidth, physicalHeight);
+                const physicalPosition = new Position(scaledPoint, physicalSize);
+                const message = new TouchControlMessage(action, pointerId, physicalPosition, pressure, buttons, actionButton);
+                const validated = InteractionHandler.validateMessage(e, message, storage, `${logPrefix}[validate]`);
+                console.log(logPrefix, `Validated messages count:`, validated.length);
+                messages.push(...validated);
                 points.push(touch.position.point);
             } else {
                 if (previous) {

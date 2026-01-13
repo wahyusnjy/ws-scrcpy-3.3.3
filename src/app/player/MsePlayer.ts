@@ -24,7 +24,7 @@ export class MsePlayer extends BasePlayer {
         bitrate: 7340032,
         maxFps: 60,
         iFrameInterval: 10,
-        bounds: new Size(720, 720),
+        bounds: new Size(320, 720),
         sendFrameMeta: false,
     });
     private static DEFAULT_FRAMES_PER_FRAGMENT = 1;
@@ -40,6 +40,7 @@ export class MsePlayer extends BasePlayer {
             tag.id = id;
         }
         tag.className = 'video-layer';
+        tag.style.width = '320px';
         return tag;
     }
 
@@ -85,7 +86,7 @@ export class MsePlayer extends BasePlayer {
         tag.addEventListener('error', this.onVideoError);
         tag.addEventListener('canplay', this.onVideoCanPlay);
         // eslint-disable-next-line @typescript-eslint/no-empty-function
-        setLogger(() => {}, console.error);
+        setLogger(() => { }, console.error);
     }
 
     onVideoError = (event: Event): void => {
@@ -95,6 +96,11 @@ export class MsePlayer extends BasePlayer {
     onVideoCanPlay = (): void => {
         this.onCanPlayHandler();
     };
+
+    // Override: MsePlayer doesn't need screen info before starting playback
+    protected needScreenInfoBeforePlay(): boolean {
+        return false;
+    }
 
     private static createConverter(
         tag: HTMLVideoElement,
@@ -135,7 +141,41 @@ export class MsePlayer extends BasePlayer {
         this.canPlay = true;
         this.tag.play();
         this.tag.removeEventListener('canplay', this.onVideoCanPlay);
-        this.checkVideoResize();
+
+        // Auto-create screenInfo dengan ukuran fixed 320x720
+        setTimeout(() => {
+            this.autoSetupScreenInfo();
+        }, 100);
+    }
+
+    private autoSetupScreenInfo(): void {
+        console.log('[MsePlayer] autoSetupScreenInfo called');
+        // Import yang diperlukan sudah ada di atas (ScreenInfo, Rect, Size)
+        const ScreenInfo = require('../ScreenInfo').default;
+        const Rect = require('../Rect').default;
+        const Size = require('../Size').default;
+
+        // Create screenInfo dengan ukuran fixed 320x720
+        const fixedWidth = 320;
+        const fixedHeight = 720;
+
+        const screenInfo = new ScreenInfo(
+            new Rect(0, 0, fixedWidth, fixedHeight),
+            new Size(fixedWidth, fixedHeight),
+            0
+        );
+
+        console.log('[MsePlayer] Created screenInfo, calling setScreenInfo');
+        // Set screen info agar touch handler bisa bekerja
+        this.setScreenInfo(screenInfo);
+
+        console.log('[MsePlayer] Dispatching mse-screeninfo-ready event');
+        // Dispatch custom event agar FeaturedInteractionHandler bisa di-init
+        const event = new CustomEvent('mse-screeninfo-ready', {
+            detail: { screenInfo }
+        });
+        window.dispatchEvent(event);
+        console.log('[MsePlayer] Event dispatched successfully');
     }
 
     protected calculateMomentumStats(): void {
@@ -237,15 +277,15 @@ export class MsePlayer extends BasePlayer {
         return MsePlayer.preferredVideoSettings;
     }
 
-    checkVideoResize = (): void => {
-        if (!this.tag) {
-            return;
-        }
-        const { videoHeight, videoWidth } = this.tag;
-        if (this.videoHeight !== videoHeight || this.videoWidth !== videoWidth) {
-            this.calculateScreenInfoForBounds(videoWidth, videoHeight);
-        }
-    };
+    // checkVideoResize = (): void => {
+    //     if (!this.tag) {
+    //         return;
+    //     }
+    //     const { videoHeight, videoWidth } = this.tag;
+    //     if (this.videoHeight !== videoHeight || this.videoWidth !== videoWidth) {
+    //         this.calculateScreenInfoForBounds(videoWidth, videoHeight);
+    //     }
+    // };
     cleanSourceBuffer = (): void => {
         if (!this.sourceBuffer) {
             return;
@@ -420,9 +460,9 @@ export class MsePlayer extends BasePlayer {
                     return true;
                 }
             }
-            if (this.sourceBuffer) {
-                this.sourceBuffer.onupdateend = this.checkVideoResize;
-            }
+            // if (this.sourceBuffer) {
+            //     this.sourceBuffer.onupdateend = this.checkVideoResize;
+            // }
         }
         if (this.waitUntilSegmentRemoved) {
             return false;

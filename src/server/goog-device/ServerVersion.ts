@@ -10,7 +10,12 @@ export class ServerVersion {
         if (main) {
             this.parts = main.split('.');
         }
-        this.compatible = this.suffix.startsWith('ws') && this.parts.length >= 2;
+        // Compatible if:
+        // 1. Has '-ws' suffix (old NetrisTV fork, e.g., '1.19-ws6')
+        // 2. OR version >= 3.0.0 (newer scrcpy with potential native WebSocket support)
+        const hasWsSuffix = this.suffix.startsWith('ws') && this.parts.length >= 2;
+        const isVersion3OrAbove = this.parts.length >= 1 && parseInt(this.parts[0], 10) >= 3;
+        this.compatible = hasWsSuffix || isVersion3OrAbove;
     }
     public equals(a: ServerVersion | string): boolean {
         const versionString = typeof a === 'string' ? a : a.versionString;

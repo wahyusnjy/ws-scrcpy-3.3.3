@@ -1,5 +1,6 @@
 import '../../LICENSE';
 import * as readline from 'readline';
+import * as path from 'path';
 import { Config } from './Config';
 import { HttpServer } from './services/HttpServer';
 import { WebSocketServer } from './services/WebSocketServer';
@@ -8,6 +9,17 @@ import { MwFactory } from './mw/Mw';
 import { WebsocketProxy } from './mw/WebsocketProxy';
 import { HostTracker } from './mw/HostTracker';
 import { WebsocketMultiplexer } from './mw/WebsocketMultiplexer';
+import { Logger } from '../common/Logger';
+
+// Initialize Logger with log file
+const logDir = path.join(__dirname, '..', 'logs');
+Logger.init(logDir);
+
+Logger.section('WS-SCRCPY SERVER STARTING');
+Logger.info('Main', 'Node.js version:', process.version);
+Logger.info('Main', 'Platform:', process.platform);
+Logger.info('Main', 'Architecture:', process.arch);
+Logger.separator();
 
 const servicesToStart: ServiceClass[] = [HttpServer, WebSocketServer];
 
@@ -91,13 +103,16 @@ loadPlatformModulesPromises.push(loadApplModules());
 
 Promise.all(loadPlatformModulesPromises)
     .then(() => {
+        Logger.info('Main', 'All platform modules loaded successfully');
         return servicesToStart.map((serviceClass: ServiceClass) => {
             const service = serviceClass.getInstance();
             runningServices.push(service);
+            Logger.info('Main', `Starting service: ${service.getName()}`);
             return service.start();
         });
     })
     .then(() => {
+        Logger.section('SERVER READY');
         const wsService = WebSocketServer.getInstance();
         mwList.forEach((mwFactory: MwFactory) => {
             wsService.registerMw(mwFactory);
@@ -106,6 +121,10 @@ Promise.all(loadPlatformModulesPromises)
         mw2List.forEach((mwFactory: MwFactory) => {
             WebsocketMultiplexer.registerMw(mwFactory);
         });
+
+        Logger.info('Main', '✓ All services started successfully');
+        Logger.info('Main', '✓ Server is ready to accept connections');
+        Logger.separator();
 
         if (process.platform === 'win32') {
             readline
@@ -120,22 +139,31 @@ Promise.all(loadPlatformModulesPromises)
         process.on('SIGTERM', exit);
     })
     .catch((error) => {
-        console.error(error.message);
+        Logger.error('Main', '✗ STARTUP FAILED:', error.message);
+        if (error.stack) {
+            Logger.debug('Main', 'Stack trace:', error.stack);
+        }
+        Logger.separator();
         exit('1');
     });
 
 let interrupted = false;
 function exit(signal: string) {
-    console.log(`\nReceived signal ${signal}`);
+    Logger.separator();
+    Logger.warn('Main', `Received signal ${signal}`);
     if (interrupted) {
-        console.log('Force exit');
+        Logger.warn('Main', 'Force exit');
+        Logger.close();
         process.exit(0);
         return;
     }
     interrupted = true;
     runningServices.forEach((service: Service) => {
         const serviceName = service.getName();
-        console.log(`Stopping ${serviceName} ...`);
+        Logger.info('Main', `Stopping ${serviceName}...`);
         service.release();
     });
+    Logger.info('Main', 'Server shutdown complete');
+    Logger.separator();
+    Logger.close();
 }

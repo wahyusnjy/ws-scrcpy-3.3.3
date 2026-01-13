@@ -4,8 +4,8 @@
   "description": "Web client for scrcpy and more",
   "scripts": {
     "clean": "npx rimraf dist",
-    "dist:dev": "webpack --config webpack/ws-scrcpy.dev.ts --stats-error-details",
-    "dist:prod": "webpack --config webpack/ws-scrcpy.prod.ts --stats-error-details",
+    "dist:dev": "ts-node --files ./node_modules/webpack-cli/bin/cli.js --config webpack/ws-scrcpy.dev.ts --stats-error-details",
+    "dist:prod": "ts-node --files ./node_modules/webpack-cli/bin/cli.js --config webpack/ws-scrcpy.prod.ts --stats-error-details",
     "dist": "npm run dist:prod",
     "start": "npm run dist && cd dist && npm start",
     "script:dist:start": "node ./index.js",

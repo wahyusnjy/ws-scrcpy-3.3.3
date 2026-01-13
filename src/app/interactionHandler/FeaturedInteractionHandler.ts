@@ -33,7 +33,22 @@ export class FeaturedInteractionHandler extends InteractionHandler {
         super(player, FeaturedInteractionHandler.touchEventsNames, FeaturedInteractionHandler.keyEventsNames);
         this.tag.addEventListener('mouseleave', this.onMouseLeave);
         this.tag.addEventListener('mouseenter', this.onMouseEnter);
+
+        // Direct listeners as backup to ensure mousedown/mouseup are captured
+        this.tag.addEventListener('mousedown', this.onDirectMouseDown);
+        this.tag.addEventListener('mouseup', this.onDirectMouseUp);
+        console.log(TAG, 'Direct mousedown/mouseup listeners attached to canvas');
     }
+
+    private onDirectMouseDown = (e: MouseEvent): void => {
+        console.log(TAG, 'DIRECT mousedown captured!', e);
+        // Will be handled by onInteraction via normal flow
+    };
+
+    private onDirectMouseUp = (e: MouseEvent): void => {
+        console.log(TAG, 'DIRECT mouseup captured!', e);
+        // Will be handled by onInteraction via normal flow
+    };
 
     public buildScrollEvent(event: WheelEvent, screenInfo: ScreenInfo): ScrollControlMessage[] {
         const messages: ScrollControlMessage[] = [];
@@ -56,16 +71,18 @@ export class FeaturedInteractionHandler extends InteractionHandler {
     }
 
     protected onInteraction(event: MouseEvent | TouchEvent): void {
+        console.log(TAG, 'onInteraction called, event type:', event.type);
         const screenInfo = this.player.getScreenInfo();
+        console.log(TAG, 'screenInfo:', screenInfo);
         if (!screenInfo) {
+            console.warn(TAG, 'NO screenInfo! Aborting touch handling');
             return;
         }
         let messages: ControlMessage[];
         let storage: Map<number, TouchControlMessage>;
         if (event instanceof MouseEvent) {
-            if (event.target !== this.tag) {
-                return;
-            }
+            // Accept all mouse events - simplified for debugging
+            console.log(TAG, 'Mouse event:', event.type);
             if (window['WheelEvent'] && event instanceof WheelEvent) {
                 messages = this.buildScrollEvent(event, screenInfo);
             } else {
@@ -90,7 +107,9 @@ export class FeaturedInteractionHandler extends InteractionHandler {
             event.preventDefault();
         }
         event.stopPropagation();
+        console.log(TAG, `Sending ${messages.length} messages to device`);
         messages.forEach((message) => {
+            console.log(TAG, 'Sending message:', message);
             this.listener.sendMessage(message);
         });
     }
@@ -127,6 +146,8 @@ export class FeaturedInteractionHandler extends InteractionHandler {
         super.release();
         this.tag.removeEventListener('mouseleave', this.onMouseLeave);
         this.tag.removeEventListener('mouseenter', this.onMouseEnter);
+        this.tag.removeEventListener('mousedown', this.onDirectMouseDown);
+        this.tag.removeEventListener('mouseup', this.onDirectMouseUp);
         this.storedFromMouseEvent.clear();
     }
 }

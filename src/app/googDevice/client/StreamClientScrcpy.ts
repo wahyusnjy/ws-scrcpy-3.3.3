@@ -43,8 +43,7 @@ const TAG = '[StreamClientScrcpy]';
 
 export class StreamClientScrcpy
     extends BaseClient<ParamsStreamScrcpy, never>
-    implements KeyEventListener, InteractionHandlerListener
-{
+    implements KeyEventListener, InteractionHandlerListener {
     public static ACTION = 'stream';
     private static players: Map<string, PlayerClass> = new Map<string, PlayerClass>();
 
@@ -169,14 +168,21 @@ export class StreamClientScrcpy
 
     public onVideo = (data: ArrayBuffer): void => {
         if (!this.player) {
+            console.warn(TAG, 'onVideo called but player is null');
             return;
         }
         const STATE = BasePlayer.STATE;
-        if (this.player.getState() === STATE.PAUSED) {
+        const currentState = this.player.getState();
+        // console.log(TAG, `onVideo: received ${data.byteLength} bytes, player state: ${currentState}`);
+
+        if (currentState === STATE.PAUSED) {
+            console.log(TAG, 'Player is PAUSED, calling play()');
             this.player.play();
         }
         if (this.player.getState() === STATE.PLAYING) {
             this.player.pushFrame(new Uint8Array(data));
+        } else {
+            console.warn(TAG, `Player state is ${this.player.getState()}, not pushing frame`);
         }
     };
 
@@ -187,7 +193,9 @@ export class StreamClientScrcpy
     };
 
     public onDisplayInfo = (infoArray: DisplayCombinedInfo[]): void => {
+        console.log(TAG, 'onDisplayInfo called, infoArray length:', infoArray.length);
         if (!this.player) {
+            console.warn(TAG, 'onDisplayInfo: player is null');
             return;
         }
         let currentSettings = this.player.getVideoSettings();
@@ -196,9 +204,11 @@ export class StreamClientScrcpy
             return value.displayInfo.displayId === displayId;
         });
         if (!info) {
+            console.warn(TAG, 'onDisplayInfo: no matching displayId found');
             return;
         }
         if (this.player.getState() === BasePlayer.STATE.PAUSED) {
+            console.log(TAG, 'onDisplayInfo: player is PAUSED, calling play()');
             this.player.play();
         }
         const { videoSettings, screenInfo } = info;
@@ -261,6 +271,15 @@ export class StreamClientScrcpy
         this.touchHandler = undefined;
     };
 
+    public onScreenInfoReady = (event: Event): void => {
+        const customEvent = event as CustomEvent;
+        console.log(TAG, 'onScreenInfoReady called, re-initializing touch handlers');
+        if (this.player && customEvent.detail?.screenInfo) {
+            // Re-initialize touch handlers now that screenInfo is available
+            this.setTouchListeners(this.player);
+        }
+    };
+
     public startStream({ udid, player, playerName, videoSettings, fitToScreen }: StartParams): void {
         if (!udid) {
             throw Error(`Invalid udid value: "${udid}"`);
@@ -320,6 +339,8 @@ export class StreamClientScrcpy
         deviceView.appendChild(this.controlButtons);
         const video = document.createElement('div');
         video.className = 'video';
+        video.style.height = '720px';
+        video.style.width = '320px';
         deviceView.appendChild(video);
         deviceView.appendChild(moreBox);
         player.setParent(video);
@@ -344,11 +365,23 @@ export class StreamClientScrcpy
         streamReceiver.on('clientsStats', this.onClientsStats);
         streamReceiver.on('displayInfo', this.onDisplayInfo);
         streamReceiver.on('disconnected', this.onDisconnected);
+
+        // Listen for screenInfo ready event (from MsePlayer auto-create)
+        window.addEventListener('mse-screeninfo-ready', this.onScreenInfoReady);
+
+        player.on('video-view-resize', () => {
+            // const { width, height } = size;
+            // deviceView.style.width = `${width}px`;
+            // deviceView.style.height = `${height}px`;
+        });
         console.log(TAG, player.getName(), udid);
     }
 
     public sendMessage(message: ControlMessage): void {
+        console.log(TAG, 'sendMessage called, message type:', message.type, 'message:', message);
+        console.log(TAG, 'streamReceiver exists:', !!this.streamReceiver);
         this.streamReceiver.sendEvent(message);
+        console.log(TAG, 'Message sent to streamReceiver');
     }
 
     public getDeviceName(): string {
@@ -391,9 +424,13 @@ export class StreamClientScrcpy
     }
 
     private setTouchListeners(player: BasePlayer): void {
+        // Release existing handler if any
         if (this.touchHandler) {
-            return;
+            console.log(TAG, 'Releasing existing touch handler before re-init');
+            this.touchHandler.release();
+            this.touchHandler = undefined;
         }
+        console.log(TAG, 'Creating new FeaturedInteractionHandler');
         this.touchHandler = new FeaturedInteractionHandler(player, this);
     }
 

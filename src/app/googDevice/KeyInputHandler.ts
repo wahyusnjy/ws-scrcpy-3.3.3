@@ -1,6 +1,6 @@
 import { KeyCodeControlMessage } from '../controlMessage/KeyCodeControlMessage';
 import KeyEvent from './android/KeyEvent';
-import { KeyToCodeMap } from './KeyToCodeMap';
+import { KeyToHidMap, HidModifiers } from './KeyToHidMap';
 
 export interface KeyEventListener {
     onKeyEvent: (event: KeyCodeControlMessage) => void;
@@ -11,8 +11,8 @@ export class KeyInputHandler {
     private static readonly listeners: Set<KeyEventListener> = new Set();
     private static handler = (event: Event): void => {
         const keyboardEvent = event as KeyboardEvent;
-        const keyCode = KeyToCodeMap.get(keyboardEvent.code);
-        if (!keyCode) {
+        const hidKeyCode = KeyToHidMap.get(keyboardEvent.code);
+        if (!hidKeyCode) {
             return;
         }
         let action: typeof KeyEvent.ACTION_DOWN | typeof KeyEvent.ACTION_DOWN;
@@ -20,35 +20,39 @@ export class KeyInputHandler {
         if (keyboardEvent.type === 'keydown') {
             action = KeyEvent.ACTION_DOWN;
             if (keyboardEvent.repeat) {
-                let count = KeyInputHandler.repeatCounter.get(keyCode);
+                let count = KeyInputHandler.repeatCounter.get(hidKeyCode);
                 if (typeof count !== 'number') {
                     count = 1;
                 } else {
                     count++;
                 }
                 repeatCount = count;
-                KeyInputHandler.repeatCounter.set(keyCode, count);
+                KeyInputHandler.repeatCounter.set(hidKeyCode, count);
             }
         } else if (keyboardEvent.type === 'keyup') {
             action = KeyEvent.ACTION_UP;
-            KeyInputHandler.repeatCounter.delete(keyCode);
+            KeyInputHandler.repeatCounter.delete(hidKeyCode);
         } else {
             return;
         }
-        const metaState =
-            (keyboardEvent.getModifierState('Alt') ? KeyEvent.META_ALT_ON : 0) |
-            (keyboardEvent.getModifierState('Shift') ? KeyEvent.META_SHIFT_ON : 0) |
-            (keyboardEvent.getModifierState('Control') ? KeyEvent.META_CTRL_ON : 0) |
-            (keyboardEvent.getModifierState('Meta') ? KeyEvent.META_META_ON : 0) |
-            (keyboardEvent.getModifierState('CapsLock') ? KeyEvent.META_CAPS_LOCK_ON : 0) |
-            (keyboardEvent.getModifierState('ScrollLock') ? KeyEvent.META_SCROLL_LOCK_ON : 0) |
-            (keyboardEvent.getModifierState('NumLock') ? KeyEvent.META_NUM_LOCK_ON : 0);
 
+        // Build HID modifier byte
+        const hidModifiers =
+            (keyboardEvent.getModifierState('Control') && !keyboardEvent.location ? HidModifiers.CTRL_LEFT : 0) |
+            (keyboardEvent.getModifierState('Control') && keyboardEvent.location === 2 ? HidModifiers.CTRL_RIGHT : 0) |
+            (keyboardEvent.getModifierState('Shift') && keyboardEvent.location !== 2 ? HidModifiers.SHIFT_LEFT : 0) |
+            (keyboardEvent.getModifierState('Shift') && keyboardEvent.location === 2 ? HidModifiers.SHIFT_RIGHT : 0) |
+            (keyboardEvent.getModifierState('Alt') && keyboardEvent.location !== 2 ? HidModifiers.ALT_LEFT : 0) |
+            (keyboardEvent.getModifierState('Alt') && keyboardEvent.location === 2 ? HidModifiers.ALT_RIGHT : 0) |
+            (keyboardEvent.getModifierState('Meta') && keyboardEvent.location !== 2 ? HidModifiers.GUI_LEFT : 0) |
+            (keyboardEvent.getModifierState('Meta') && keyboardEvent.location === 2 ? HidModifiers.GUI_RIGHT : 0);
+
+        // For UHID: keycode is HID Usage ID, metaState is HID modifier byte
         const controlMessage: KeyCodeControlMessage = new KeyCodeControlMessage(
             action,
-            keyCode,
+            hidKeyCode,  // HID Usage ID (not Android keycode)
             repeatCount,
-            metaState,
+            hidModifiers, // HID modifier byte (not Android metaState)
         );
         KeyInputHandler.listeners.forEach((listener) => {
             listener.onKeyEvent(controlMessage);

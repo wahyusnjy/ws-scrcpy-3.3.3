@@ -11,7 +11,7 @@ export interface TouchControlMessageInterface extends ControlMessageInterface {
 }
 
 export class TouchControlMessage extends ControlMessage {
-    public static PAYLOAD_LENGTH = 28;
+    public static PAYLOAD_LENGTH = 32; // Changed from 28 to 32 (added 4 bytes for actionButton)
     /**
      * - For a touch screen or touch pad, reports the approximate pressure
      * applied to the surface by a finger or other tool.  The value is
@@ -35,6 +35,7 @@ export class TouchControlMessage extends ControlMessage {
         readonly position: Position,
         readonly pressure: number,
         readonly buttons: number,
+        readonly actionButton: number = 0,
     ) {
         super(ControlMessage.TYPE_TOUCH);
     }
@@ -47,14 +48,18 @@ export class TouchControlMessage extends ControlMessage {
         let offset = 0;
         offset = buffer.writeUInt8(this.type, offset);
         offset = buffer.writeUInt8(this.action, offset);
-        offset = buffer.writeUInt32BE(0, offset); // pointerId is `long` (8 bytes) on java side
-        offset = buffer.writeUInt32BE(this.pointerId, offset);
+        // pointerId is `long` (8 bytes) on java side
+        // For negative values like POINTER_ID_MOUSE (-1), we need to set all bits in both high and low 32-bit parts
+        const pointerIdHigh = this.pointerId < 0 ? -1 : 0;
+        offset = buffer.writeInt32BE(pointerIdHigh, offset); // pointerId high 32 bits (signed)
+        offset = buffer.writeInt32BE(this.pointerId, offset); // pointerId low 32 bits (signed)
         offset = buffer.writeUInt32BE(this.position.point.x, offset);
         offset = buffer.writeUInt32BE(this.position.point.y, offset);
         offset = buffer.writeUInt16BE(this.position.screenSize.width, offset);
         offset = buffer.writeUInt16BE(this.position.screenSize.height, offset);
         offset = buffer.writeUInt16BE(this.pressure * TouchControlMessage.MAX_PRESSURE_VALUE, offset);
-        buffer.writeUInt32BE(this.buttons, offset);
+        offset = buffer.writeUInt32BE(this.actionButton, offset); // actionButton (4 bytes)
+        buffer.writeUInt32BE(this.buttons, offset); // buttons (4 bytes)
         return buffer;
     }
 

@@ -46,7 +46,7 @@ export interface PlayerClass {
         fitToScreen: boolean,
         displayInfo?: DisplayInfo,
     ): void;
-    new (udid: string, displayInfo?: DisplayInfo): BasePlayer;
+    new(udid: string, displayInfo?: DisplayInfo): BasePlayer;
 }
 
 export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
@@ -383,11 +383,11 @@ export abstract class BasePlayer extends TypedEmitter<PlayerEvents> {
         this.receivedFirstFrame = false;
         this.screenInfo = screenInfo;
         const { width, height } = screenInfo.videoSize;
-        this.touchableCanvas.width = width;
-        this.touchableCanvas.height = height;
+        this.touchableCanvas.width = 320;
+        this.touchableCanvas.height = 720;
         if (this.parentElement) {
-            this.parentElement.style.height = `${height}px`;
-            this.parentElement.style.width = `${width}px`;
+            this.parentElement.style.height = '720px';
+            this.parentElement.style.width = '320px';
         }
         const size = new Size(width, height);
         this.emit('video-view-resize', size);

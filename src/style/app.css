@@ -115,6 +115,7 @@ body.stream {
 .touch-layer {
     position: absolute;
     z-index: 1;
+    pointer-events: auto;
 }
 
 .video {
@@ -145,34 +146,34 @@ body.stream {
     opacity: 1;
 }
 
-.control-wrapper > input[type=checkbox] {
+.control-wrapper>input[type=checkbox] {
     display: none;
 }
 
-.control-wrapper > label {
+.control-wrapper>label {
     display: inline-block;
 }
 
-.control-button > svg {
+.control-button>svg {
     fill: var(--svg-button-fill);
 }
 
-.control-wrapper > input[type=checkbox].two-images:checked + label > svg.image-on {
+.control-wrapper>input[type=checkbox].two-images:checked+label>svg.image-on {
     display: block;
 }
 
-.control-wrapper > input[type=checkbox].two-images:not(:checked) + label > svg.image-on {
+.control-wrapper>input[type=checkbox].two-images:not(:checked)+label>svg.image-on {
     display: none;
 }
 
-.control-wrapper > input[type=checkbox].two-images:checked + label > svg.image-off {
+.control-wrapper>input[type=checkbox].two-images:checked+label>svg.image-off {
     display: none;
 }
 
-.control-wrapper > input[type=checkbox].two-images:not(:checked) + label > svg.image-off {
+.control-wrapper>input[type=checkbox].two-images:not(:checked)+label>svg.image-off {
     display: block;
 }
 
-.control-wrapper > input[type=checkbox]:checked + label > svg {
+.control-wrapper>input[type=checkbox]:checked+label>svg {
     fill: var(--svg-checkbox-bg-color);
 }
