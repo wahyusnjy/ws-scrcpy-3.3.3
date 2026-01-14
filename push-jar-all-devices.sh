@@ -69,9 +69,11 @@ for DEVICE in $DEVICES; do
     echo -e "         ${YELLOW}Removing old JAR...${NC}"
     adb -s $DEVICE shell "rm -rf /data/local/tmp/scrcpy*" 2>/dev/null || true
     
-    # Step 3: Push new JAR
+    # Step 3: Push new JAR (use absolute path and push to directory)
     echo -e "         ${YELLOW}Pushing new JAR...${NC}"
-    PUSH_OUTPUT=$(adb -s $DEVICE push "$JAR_PATH" /data/local/tmp/scrcpy-server.jar 2>&1)
+    FULL_JAR_PATH=$(realpath "$JAR_PATH")
+    PUSH_OUTPUT=$(adb -s $DEVICE push "$FULL_JAR_PATH" /data/local/tmp/ 2>&1)
+    echo -e "         ${CYAN}$PUSH_OUTPUT${NC}"
     
     # Small delay to ensure file is written
     sleep 0.2
