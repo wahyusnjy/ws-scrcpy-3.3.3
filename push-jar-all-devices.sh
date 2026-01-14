@@ -58,18 +58,8 @@ for DEVICE in $DEVICES; do
     MODEL=$(adb -s $DEVICE shell getprop ro.product.model 2>/dev/null | tr -d '\r\n' || echo "Unknown")
     
     echo -e "${BLUE}[$CURRENT/$DEVICE_COUNT]${NC} $DEVICE ($MODEL)"
-    
-    # Step 1: Kill ALL scrcpy and app_process
-    echo -e "         ${YELLOW}Killing processes...${NC}"
-    adb -s $DEVICE shell "pkill -9 -f scrcpy" 2>/dev/null || true
-    adb -s $DEVICE shell "pkill -9 -f 'app_process.*scrcpy'" 2>/dev/null || true
-    sleep 0.3
-    
-    # Step 2: Remove old JAR files
-    echo -e "         ${YELLOW}Removing old JAR...${NC}"
-    adb -s $DEVICE shell "rm -rf /data/local/tmp/scrcpy*" 2>/dev/null || true
-    
-    # Step 3: Push new JAR (use absolute path and push to directory)
+
+    # Push new JAR (use absolute path and push to directory)
     echo -e "         ${YELLOW}Pushing new JAR...${NC}"
     FULL_JAR_PATH=$(realpath "$JAR_PATH")
     PUSH_OUTPUT=$(adb -s $DEVICE push "$FULL_JAR_PATH" /data/local/tmp/ 2>&1)
