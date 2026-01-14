@@ -21,8 +21,8 @@ echo ""
 
 # Find JAR file
 JAR_PATH=""
-if [ -f "./dist/vendor/Genymobile/scrcpy/scrcpy-server.jar" ]; then
-    JAR_PATH="./dist/vendor/Genymobile/scrcpy/scrcpy-server.jar"
+if [ -f "/home/me/ws-scrcpy-3.3.3/vendor/Genymobile/scrcpyscrcpy-server.jar" ]; then
+    JAR_PATH="/home/me/ws-scrcpy-3.3.3/vendor/Genymobile/scrcpyscrcpy-server.jar"
 elif [ -f "./vendor/Genymobile/scrcpy/scrcpy-server.jar" ]; then
     JAR_PATH="./vendor/Genymobile/scrcpy/scrcpy-server.jar"
 else
