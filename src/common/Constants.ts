@@ -15,7 +15,7 @@ SCRCPY_LISTENS_ON_ALL_INTERFACES = true;
 SCRCPY_LISTENS_ON_ALL_INTERFACES = false;
 /// #endif
 
-const ARGUMENTS = [SERVER_VERSION, SERVER_TYPE, LOG_LEVEL, SERVER_PORT, SCRCPY_LISTENS_ON_ALL_INTERFACES, 'h264','false','true']; // Added control=true to enable touch input
+const ARGUMENTS = [SERVER_VERSION, SERVER_TYPE, LOG_LEVEL, SERVER_PORT, SCRCPY_LISTENS_ON_ALL_INTERFACES, 'h264', 'true', 'true']; // UHID keyboard, inject mouse (shows cursor)
 
 export const SERVER_PROCESS_NAME = 'app_process';
 

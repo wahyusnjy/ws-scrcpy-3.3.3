@@ -11,6 +11,16 @@ export class KeyInputHandler {
     private static readonly listeners: Set<KeyEventListener> = new Set();
     private static handler = (event: Event): void => {
         const keyboardEvent = event as KeyboardEvent;
+        // Prevent browser default behavior (scrolling, etc.) for all keys when streaming
+        event.preventDefault();
+
+        // ESC key - toggle keyboard capture off
+        if (keyboardEvent.code === 'Escape') {
+            console.log('[KeyInputHandler] ESC pressed - releasing keyboard capture');
+            KeyInputHandler.detachListeners();
+            return;
+        }
+
         const hidKeyCode = KeyToHidMap.get(keyboardEvent.code);
         if (!hidKeyCode) {
             return;

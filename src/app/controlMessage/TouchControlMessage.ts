@@ -11,23 +11,12 @@ export interface TouchControlMessageInterface extends ControlMessageInterface {
 }
 
 export class TouchControlMessage extends ControlMessage {
-    public static PAYLOAD_LENGTH = 32; // Changed from 28 to 32 (added 4 bytes for actionButton)
-    /**
-     * - For a touch screen or touch pad, reports the approximate pressure
-     * applied to the surface by a finger or other tool.  The value is
-     * normalized to a range from 0 (no pressure at all) to 1 (normal pressure),
-     * although values higher than 1 may be generated depending on the
-     * calibration of the input device.
-     * - For a trackball, the value is set to 1 if the trackball button is pressed
-     * or 0 otherwise.
-     * - For a mouse, the value is set to 1 if the primary mouse button is pressed
-     * or 0 otherwise.
-     *
-     * - scrcpy server expects signed short (2 bytes) for a pressure value
-     * - in browser TouchEvent has `force` property (values in 0..1 range), we
-     * use it as "pressure" for scrcpy
-     */
+    // Inject touch format: 32 bytes total (1 type + 31 payload)
+    public static PAYLOAD_LENGTH = 31;
     public static readonly MAX_PRESSURE_VALUE = 0xffff;
+
+    // Use POINTER_ID_MOUSE to show cursor on Android
+    public static readonly POINTER_ID_MOUSE = -1;
 
     constructor(
         readonly action: number,
@@ -41,25 +30,49 @@ export class TouchControlMessage extends ControlMessage {
     }
 
     /**
-     * @override
+     * Generate inject touch message (32 bytes):
+     * Follows scrcpy protocol for TYPE_INJECT_TOUCH_EVENT
      */
     public toBuffer(): Buffer {
         const buffer: Buffer = Buffer.alloc(TouchControlMessage.PAYLOAD_LENGTH + 1);
         let offset = 0;
+
+        // Type byte (2 = inject touch)
         offset = buffer.writeUInt8(this.type, offset);
+
+        // Action (1 byte)
         offset = buffer.writeUInt8(this.action, offset);
-        // pointerId is `long` (8 bytes) on java side
-        // For negative values like POINTER_ID_MOUSE (-1), we need to set all bits in both high and low 32-bit parts
-        const pointerIdHigh = this.pointerId < 0 ? -1 : 0;
-        offset = buffer.writeInt32BE(pointerIdHigh, offset); // pointerId high 32 bits (signed)
-        offset = buffer.writeInt32BE(this.pointerId, offset); // pointerId low 32 bits (signed)
-        offset = buffer.writeUInt32BE(this.position.point.x, offset);
-        offset = buffer.writeUInt32BE(this.position.point.y, offset);
+
+        // Pointer ID (8 bytes, signed 64-bit) - use POINTER_ID_MOUSE (-1) to show cursor
+        // Write as two 32-bit values (high and low)
+        const pointerId = TouchControlMessage.POINTER_ID_MOUSE;
+        offset = buffer.writeInt32BE(pointerId < 0 ? -1 : 0, offset); // high 32 bits
+        offset = buffer.writeInt32BE(pointerId, offset); // low 32 bits (sign-extended)
+
+        // Position X (4 bytes, signed 32-bit)
+        offset = buffer.writeInt32BE(Math.round(this.position.point.x), offset);
+
+        // Position Y (4 bytes, signed 32-bit)
+        offset = buffer.writeInt32BE(Math.round(this.position.point.y), offset);
+
+        // Screen width (2 bytes, unsigned 16-bit)
         offset = buffer.writeUInt16BE(this.position.screenSize.width, offset);
+
+        // Screen height (2 bytes, unsigned 16-bit)
         offset = buffer.writeUInt16BE(this.position.screenSize.height, offset);
-        offset = buffer.writeUInt16BE(this.pressure * TouchControlMessage.MAX_PRESSURE_VALUE, offset);
-        offset = buffer.writeUInt32BE(this.actionButton, offset); // actionButton (4 bytes)
-        buffer.writeUInt32BE(this.buttons, offset); // buttons (4 bytes)
+
+        // Pressure (2 bytes, unsigned 16-bit)
+        const pressureValue = Math.round(this.pressure * TouchControlMessage.MAX_PRESSURE_VALUE);
+        offset = buffer.writeUInt16BE(pressureValue, offset);
+
+        // Action button (4 bytes, signed 32-bit)
+        offset = buffer.writeInt32BE(this.actionButton, offset);
+
+        // Buttons (4 bytes, signed 32-bit)
+        buffer.writeInt32BE(this.buttons, offset);
+
+        console.log(`[Inject Touch] action=${this.action}, pointerId=${pointerId}, pos=(${Math.round(this.position.point.x)},${Math.round(this.position.point.y)}), screen=${this.position.screenSize.width}x${this.position.screenSize.height}`);
+
         return buffer;
     }
 

@@ -290,10 +290,15 @@ export abstract class InteractionHandler {
                     (originalEvent instanceof MouseEvent && originalEvent.buttons) ||
                     (window['TouchEvent'] && originalEvent instanceof TouchEvent)
                 ) {
+                    // Mouse drag or touch without prior DOWN - emulate DOWN first
                     console.warn(logPrefix, 'Received ACTION_MOVE while there are no DOWN stored');
                     const emulated = InteractionHandler.createEmulatedMessage(MotionEvent.ACTION_DOWN, message);
                     messages.push(emulated);
                     storage.set(pointerId, emulated);
+                } else if (originalEvent instanceof MouseEvent && !originalEvent.buttons) {
+                    // HOVER: Mouse move without button pressed - send for UHID cursor tracking
+                    // Don't store in storage, just send the move event
+                    messages.push(message);
                 }
             } else {
                 messages.push(message);
@@ -547,21 +552,22 @@ export abstract class InteractionHandler {
                 } else if (action === MotionEvent.ACTION_UP && previous) {
                     actionButton = previous.buttons;  // Button that was pressed (now released)
                 }
-                // Override screenSize to physical display (720x1600) instead of video size
-                // This ensures coordinates are correctly mapped on the device
-                const physicalWidth = 720;
-                const physicalHeight = 1600;
-                const videoWidth = position.screenSize.width;
-                const videoHeight = position.screenSize.height;
+                // Scale coordinates from video to physical display for inject touch
+                const physicalWidth = screenInfo.contentRect.getWidth() || 720;
+                const physicalHeight = screenInfo.contentRect.getHeight() || 1600;
+                const videoWidth = position.screenSize.width || 320;
+                const videoHeight = position.screenSize.height || 720;
 
-                // Scale coordinates from video space to physical display space
                 const scaledX = Math.round((position.point.x / videoWidth) * physicalWidth);
                 const scaledY = Math.round((position.point.y / videoHeight) * physicalHeight);
 
                 const scaledPoint = new Point(scaledX, scaledY);
                 const physicalSize = new Size(physicalWidth, physicalHeight);
-                const physicalPosition = new Position(scaledPoint, physicalSize);
-                const message = new TouchControlMessage(action, pointerId, physicalPosition, pressure, buttons, actionButton);
+                const scaledPosition = new Position(scaledPoint, physicalSize);
+
+                // Use POINTER_ID_MOUSE (-1) to show cursor on Android
+                const mousePointerId = -1;
+                const message = new TouchControlMessage(action, mousePointerId, scaledPosition, pressure, buttons, actionButton);
                 const validated = InteractionHandler.validateMessage(e, message, storage, `${logPrefix}[validate]`);
                 console.log(logPrefix, `Validated messages count:`, validated.length);
                 messages.push(...validated);
