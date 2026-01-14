@@ -75,21 +75,15 @@ for DEVICE in $DEVICES; do
     
     echo -e "${BLUE}[$CURRENT/$DEVICE_COUNT]${NC} $DEVICE ($MODEL)"
     
-    # Step 1: Kill existing scrcpy processes
-    echo -e "         ${YELLOW}[1/4] Killing existing processes...${NC}"
-    adb -s $DEVICE shell "pkill -9 -f 'app_process.*scrcpy'" 2>/dev/null || true
-    adb -s $DEVICE shell "pkill -9 -f scrcpy" 2>/dev/null || true
-    sleep 0.3
-    
-    # Step 2: Push JAR
-    echo -e "         ${YELLOW}[2/4] Pushing JAR...${NC}"
+    # Step 1: Push JAR
+    echo -e "         ${YELLOW}[1/4] Pushing JAR...${NC}"
     PUSH_OUTPUT=$(adb -s $DEVICE push "$FULL_JAR_PATH" /data/local/tmp/ 2>&1)
     echo -e "         ${CYAN}$PUSH_OUTPUT${NC}"
     
     sleep 0.2
     
-    # Step 3: Verify JAR
-    echo -e "         ${YELLOW}[3/4] Verifying JAR...${NC}"
+    # Step 2: Verify JAR
+    echo -e "         ${YELLOW}[2/3] Verifying JAR...${NC}"
     REMOTE_SIZE=$(adb -s $DEVICE shell "stat -c%s /data/local/tmp/scrcpy-server.jar 2>/dev/null || echo 0" | tr -d '\r\n' | grep -o '[0-9]*' | head -1)
     
     if [ -z "$REMOTE_SIZE" ] || [ "$REMOTE_SIZE" -lt 100000 ]; then
@@ -100,8 +94,8 @@ for DEVICE in $DEVICES; do
     fi
     echo -e "         ${GREEN}✅ JAR verified: $REMOTE_SIZE bytes${NC}"
     
-    # Step 4: Start scrcpy server in background
-    echo -e "         ${YELLOW}[4/4] Starting scrcpy server...${NC}"
+    # Step 3: Start scrcpy server in background
+    echo -e "         ${YELLOW}[3/3] Starting scrcpy server...${NC}"
     
     # Run in background with nohup, redirect output to /dev/null
     adb -s $DEVICE shell "$RUN_CMD > /dev/null 2>&1 &" &
