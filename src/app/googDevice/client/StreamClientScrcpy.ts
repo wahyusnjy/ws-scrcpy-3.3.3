@@ -375,6 +375,10 @@ export class StreamClientScrcpy
             // deviceView.style.height = `${height}px`;
         });
         console.log(TAG, player.getName(), udid);
+
+        // Auto-enable keyboard capture when stream starts
+        this.setHandleKeyboardEvents(true);
+        console.log(TAG, 'Keyboard capture auto-enabled');
     }
 
     public sendMessage(message: ControlMessage): void {
