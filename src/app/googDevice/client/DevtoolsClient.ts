@@ -230,7 +230,7 @@ export class DevtoolsClient extends ManagerClient<ParamsDevtools, never> {
                 size.className = 'size';
                 size.innerText = `size ${desc.width} × ${desc.height}`;
                 sub2.appendChild(size);
-            } catch (error: any) {}
+            } catch (error: any) { }
         }
         const absoluteAddress = page.devtoolsFrontendUrl && page.devtoolsFrontendUrl.startsWith('http');
 
@@ -338,7 +338,7 @@ export class DevtoolsClient extends ManagerClient<ParamsDevtools, never> {
     }
 
     public buildList(info: DevtoolsInfo): void {
-        // console.log(info);
+        console.log(info);
         const block = this.createDeviceBlock(info);
         const header = this.createDeviceHeader(info);
         const browsers = this.createBrowsersBlock(info);

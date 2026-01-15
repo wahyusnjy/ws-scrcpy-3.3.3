@@ -159,14 +159,14 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
     }
 
     public sendEvent(event: ControlMessage): void {
-        console.log(TAG, 'sendEvent called. event type:', event.type);
-        console.log(TAG, 'WebSocket exists:', !!this.ws);
-        console.log(TAG, 'WebSocket readyState:', this.ws?.readyState, 'OPEN:', this.ws?.OPEN);
+        // console.log(TAG, 'sendEvent called. event type:', event.type);
+        // console.log(TAG, 'WebSocket exists:', !!this.ws);
+        // console.log(TAG, 'WebSocket readyState:', this.ws?.readyState, 'OPEN:', this.ws?.OPEN);
         if (this.ws && this.ws.readyState === this.ws.OPEN) {
             const buffer = event.toBuffer();
-            console.log(TAG, 'Sending buffer via WebSocket, size:', buffer.byteLength, 'bytes');
+            // console.log(TAG, 'Sending buffer via WebSocket, size:', buffer.byteLength, 'bytes');
             this.ws.send(buffer);
-            console.log(TAG, 'Buffer sent successfully');
+            // console.log(TAG, 'Buffer sent successfully');
         } else {
             console.warn(TAG, 'WebSocket not open! Queuing event. events.length:', this.events.length);
             this.events.push(event);

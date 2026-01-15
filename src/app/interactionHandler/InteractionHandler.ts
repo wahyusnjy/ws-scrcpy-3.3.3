@@ -522,37 +522,23 @@ export abstract class InteractionHandler {
         }
         const messages: TouchControlMessage[] = [];
         const points: Point[] = [];
-        console.log(logPrefix, 'Event:', e.type, 'Touches count:', touches.length);
         this.clearCanvas();
         touches.forEach((touch: Touch) => {
             const { action, buttons, position } = touch;
-            // For mouse events, use pointerId = -1 (POINTER_ID_MOUSE)
-            // For touch events, use index as pointerId
             const pointerId = -1; // POINTER_ID_MOUSE constant from scrcpy server
             const previous = storage.get(pointerId);
-            console.log(logPrefix, `Touch ${pointerId}:`, {
-                action,
-                actionName: action === MotionEvent.ACTION_DOWN ? 'DOWN' : action === MotionEvent.ACTION_MOVE ? 'MOVE' : 'UP',
-                position: { x: position.point.x, y: position.point.y },
-                invalid: touch.invalid,
-                hasPrevious: !!previous
-            });
+
             if (!touch.invalid) {
                 let pressure = 1.0;
                 if (action === MotionEvent.ACTION_UP) {
                     pressure = 0;
                 }
-                // Calculate actionButton: the button that triggered this action
-                // For ACTION_DOWN: use current buttons (the button being pressed)
-                // For ACTION_UP: use previous buttons (MouseEvent.buttons is 0 after release!)
-                // For ACTION_MOVE: 0 (no button state change)
                 let actionButton = 0;
                 if (action === MotionEvent.ACTION_DOWN) {
-                    actionButton = buttons;  // Current button being pressed
+                    actionButton = buttons;
                 } else if (action === MotionEvent.ACTION_UP && previous) {
-                    actionButton = previous.buttons;  // Button that was pressed (now released)
+                    actionButton = previous.buttons;
                 }
-                // Scale coordinates from video to physical display for inject touch
                 const physicalWidth = screenInfo.contentRect.getWidth() || 720;
                 const physicalHeight = screenInfo.contentRect.getHeight() || 1600;
                 const videoWidth = position.screenSize.width || 320;
@@ -565,11 +551,9 @@ export abstract class InteractionHandler {
                 const physicalSize = new Size(physicalWidth, physicalHeight);
                 const scaledPosition = new Position(scaledPoint, physicalSize);
 
-                // Use POINTER_ID_MOUSE (-1) to show cursor on Android
                 const mousePointerId = -1;
                 const message = new TouchControlMessage(action, mousePointerId, scaledPosition, pressure, buttons, actionButton);
                 const validated = InteractionHandler.validateMessage(e, message, storage, `${logPrefix}[validate]`);
-                console.log(logPrefix, `Validated messages count:`, validated.length);
                 messages.push(...validated);
                 points.push(touch.position.point);
             } else {
@@ -603,3 +587,4 @@ export abstract class InteractionHandler {
         InteractionHandler.unbindListeners(this);
     }
 }
+

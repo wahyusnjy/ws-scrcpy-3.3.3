@@ -71,7 +71,7 @@ export class TouchControlMessage extends ControlMessage {
         // Buttons (4 bytes, signed 32-bit)
         buffer.writeInt32BE(this.buttons, offset);
 
-        console.log(`[Inject Touch] action=${this.action}, pointerId=${pointerId}, pos=(${Math.round(this.position.point.x)},${Math.round(this.position.point.y)}), screen=${this.position.screenSize.width}x${this.position.screenSize.height}`);
+        // console.log(`[Inject Touch] action=${this.action}, pointerId=${pointerId}, pos=(${Math.round(this.position.point.x)},${Math.round(this.position.point.y)}), screen=${this.position.screenSize.width}x${this.position.screenSize.height}`);
 
         return buffer;
     }

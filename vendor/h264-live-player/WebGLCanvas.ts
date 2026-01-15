@@ -134,7 +134,7 @@ export default abstract class WebGLCanvas extends Canvas {
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tmp), gl.STATIC_DRAW);
     }
 
-    protected mvIdentity() : void {
+    protected mvIdentity(): void {
         this.mvMatrix = Matrix.I(4);
     }
 

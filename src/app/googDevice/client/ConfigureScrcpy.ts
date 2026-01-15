@@ -102,7 +102,7 @@ export class ConfigureScrcpy extends BaseClient<ParamsStreamScrcpy, ConfigureScr
     }
 
     private onEncoders = (encoders: string[]): void => {
-        // console.log(this.TAG, 'Encoders', encoders);
+        console.log(this.TAG, 'Encoders', encoders);
         const select = this.encoderSelectElement || document.createElement('select');
         let child;
         while ((child = select.firstChild)) {
@@ -119,7 +119,7 @@ export class ConfigureScrcpy extends BaseClient<ParamsStreamScrcpy, ConfigureScr
     };
 
     private onDisplayInfo = (infoArray: DisplayCombinedInfo[]): void => {
-        // console.log(this.TAG, 'Received info');
+        console.log(this.TAG, 'Received info');
         this.statusText = 'Ready';
         this.updateStatus();
         this.dialogContainer?.classList.add('ready');
@@ -148,10 +148,10 @@ export class ConfigureScrcpy extends BaseClient<ParamsStreamScrcpy, ConfigureScr
             const { videoSettings, connectionCount, displayInfo } = infoArray[selectedOptionIdx];
             this.displayInfo = displayInfo;
             if (connectionCount > 0 && videoSettings) {
-                // console.log(this.TAG, 'Apply other clients settings');
+                console.log(this.TAG, 'Apply other clients settings');
                 this.fillInputsFromVideoSettings(videoSettings, false);
             } else {
-                // console.log(this.TAG, 'Apply settings for current player');
+                console.log(this.TAG, 'Apply settings for current player');
                 this.updateVideoSettingsForPlayer();
             }
             this.connectionCount = connectionCount;
@@ -165,7 +165,7 @@ export class ConfigureScrcpy extends BaseClient<ParamsStreamScrcpy, ConfigureScr
     };
 
     private onConnected = (): void => {
-        // console.log(this.TAG, 'Connected');
+        console.log(this.TAG, 'Connected');
         this.statusText = 'Waiting for info...';
         this.updateStatus();
         if (this.okButton) {
@@ -174,7 +174,7 @@ export class ConfigureScrcpy extends BaseClient<ParamsStreamScrcpy, ConfigureScr
     };
 
     private onDisconnected = (): void => {
-        // console.log(this.TAG, 'Disconnected');
+        console.log(this.TAG, 'Disconnected');
         this.statusText = 'Disconnected';
         this.updateStatus();
         if (this.okButton) {

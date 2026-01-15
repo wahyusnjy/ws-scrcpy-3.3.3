@@ -149,7 +149,7 @@ export class MsePlayer extends BasePlayer {
     }
 
     private autoSetupScreenInfo(): void {
-        console.log('[MsePlayer] autoSetupScreenInfo called');
+        // console.log('[MsePlayer] autoSetupScreenInfo called');
         // Import yang diperlukan sudah ada di atas (ScreenInfo, Rect, Size)
         const ScreenInfo = require('../ScreenInfo').default;
         const Rect = require('../Rect').default;
@@ -165,17 +165,17 @@ export class MsePlayer extends BasePlayer {
             0
         );
 
-        console.log('[MsePlayer] Created screenInfo, calling setScreenInfo');
+        // console.log('[MsePlayer] Created screenInfo, calling setScreenInfo');
         // Set screen info agar touch handler bisa bekerja
         this.setScreenInfo(screenInfo);
 
-        console.log('[MsePlayer] Dispatching mse-screeninfo-ready event');
+        // console.log('[MsePlayer] Dispatching mse-screeninfo-ready event');
         // Dispatch custom event agar FeaturedInteractionHandler bisa di-init
         const event = new CustomEvent('mse-screeninfo-ready', {
             detail: { screenInfo }
         });
         window.dispatchEvent(event);
-        console.log('[MsePlayer] Event dispatched successfully');
+        // console.log('[MsePlayer] Event dispatched successfully');
     }
 
     protected calculateMomentumStats(): void {

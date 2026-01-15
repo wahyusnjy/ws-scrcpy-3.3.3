@@ -168,7 +168,7 @@ export class StreamClientScrcpy
 
     public onVideo = (data: ArrayBuffer): void => {
         if (!this.player) {
-            console.warn(TAG, 'onVideo called but player is null');
+            // console.warn(TAG, 'onVideo called but player is null');
             return;
         }
         const STATE = BasePlayer.STATE;
@@ -176,13 +176,13 @@ export class StreamClientScrcpy
         // console.log(TAG, `onVideo: received ${data.byteLength} bytes, player state: ${currentState}`);
 
         if (currentState === STATE.PAUSED) {
-            console.log(TAG, 'Player is PAUSED, calling play()');
+            // console.log(TAG, 'Player is PAUSED, calling play()');
             this.player.play();
         }
         if (this.player.getState() === STATE.PLAYING) {
             this.player.pushFrame(new Uint8Array(data));
         } else {
-            console.warn(TAG, `Player state is ${this.player.getState()}, not pushing frame`);
+            // console.warn(TAG, `Player state is ${this.player.getState()}, not pushing frame`);
         }
     };
 
@@ -273,7 +273,7 @@ export class StreamClientScrcpy
 
     public onScreenInfoReady = (event: Event): void => {
         const customEvent = event as CustomEvent;
-        console.log(TAG, 'onScreenInfoReady called, re-initializing touch handlers');
+        // console.log(TAG, 'onScreenInfoReady called, re-initializing touch handlers');
         if (this.player && customEvent.detail?.screenInfo) {
             // Re-initialize touch handlers now that screenInfo is available
             this.setTouchListeners(this.player);
@@ -374,18 +374,17 @@ export class StreamClientScrcpy
             // deviceView.style.width = `${width}px`;
             // deviceView.style.height = `${height}px`;
         });
-        console.log(TAG, player.getName(), udid);
+        // console.log(TAG, player.getName(), udid);
 
-        // Auto-enable keyboard capture when stream starts
-        this.setHandleKeyboardEvents(true);
-        console.log(TAG, 'Keyboard capture auto-enabled');
+        // DON'T auto-enable keyboard - user must click checkbox to select which device receives keyboard input
+        // this.setHandleKeyboardEvents(true);
     }
 
     public sendMessage(message: ControlMessage): void {
-        console.log(TAG, 'sendMessage called, message type:', message.type, 'message:', message);
-        console.log(TAG, 'streamReceiver exists:', !!this.streamReceiver);
+        // console.log(TAG, 'sendMessage called, message type:', message.type, 'message:', message);
+        // console.log(TAG, 'streamReceiver exists:', !!this.streamReceiver);
         this.streamReceiver.sendEvent(message);
-        console.log(TAG, 'Message sent to streamReceiver');
+        // console.log(TAG, 'Message sent to streamReceiver');
     }
 
     public getDeviceName(): string {
@@ -393,14 +392,18 @@ export class StreamClientScrcpy
     }
 
     public setHandleKeyboardEvents(enabled: boolean): void {
+        const udid = this.params.udid;
+        // console.log(`[StreamClient][${udid}] setHandleKeyboardEvents: ${enabled}`);
         if (enabled) {
-            KeyInputHandler.addEventListener(this);
+            KeyInputHandler.addEventListener(this, udid);
         } else {
-            KeyInputHandler.removeEventListener(this);
+            KeyInputHandler.removeEventListener(this, udid);
         }
     }
 
     public onKeyEvent(event: KeyCodeControlMessage): void {
+        // const udid = this.params.udid;
+        // console.log(`[StreamClient][${udid}] onKeyEvent: action=${event.action}, keycode=0x${event.keycode.toString(16)}`);
         this.sendMessage(event);
     }
 
@@ -430,11 +433,11 @@ export class StreamClientScrcpy
     private setTouchListeners(player: BasePlayer): void {
         // Release existing handler if any
         if (this.touchHandler) {
-            console.log(TAG, 'Releasing existing touch handler before re-init');
+            // console.log(TAG, 'Releasing existing touch handler before re-init');
             this.touchHandler.release();
             this.touchHandler = undefined;
         }
-        console.log(TAG, 'Creating new FeaturedInteractionHandler');
+        // console.log(TAG, 'Creating new FeaturedInteractionHandler');
         this.touchHandler = new FeaturedInteractionHandler(player, this);
     }
 

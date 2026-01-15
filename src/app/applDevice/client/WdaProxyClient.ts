@@ -42,8 +42,7 @@ const TAG = '[WdaProxyClient]';
 
 export class WdaProxyClient
     extends ManagerClient<ParamsWdaProxy, WdaProxyClientEvents>
-    implements TouchHandlerListener
-{
+    implements TouchHandlerListener {
     public static calculatePhysicalPoint(
         screenInfo: ScreenInfo,
         screenWidth: number,

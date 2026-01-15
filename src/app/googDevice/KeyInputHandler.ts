@@ -8,11 +8,14 @@ export interface KeyEventListener {
 
 export class KeyInputHandler {
     private static readonly repeatCounter: Map<number, number> = new Map();
-    private static readonly listeners: Set<KeyEventListener> = new Set();
+
+    // Only ONE active listener at a time (the device that has checkbox enabled)
+    private static activeListener: KeyEventListener | null = null;
+    private static activeUdid: string = '';
     private static isCapturing: boolean = false;
 
     private static handler = (event: KeyboardEvent): void => {
-        if (!KeyInputHandler.isCapturing) {
+        if (!KeyInputHandler.isCapturing || !KeyInputHandler.activeListener) {
             return;
         }
 
@@ -20,19 +23,18 @@ export class KeyInputHandler {
         event.preventDefault();
         event.stopPropagation();
 
-        // Log for debugging
-        console.log(`[KeyInputHandler] Captured: ${event.code}, type: ${event.type}`);
+        const currentUdid = KeyInputHandler.activeUdid;
+        const currentListener = KeyInputHandler.activeListener;
 
         // ESC key - toggle keyboard capture off
         if (event.code === 'Escape') {
-            console.log('[KeyInputHandler] ESC pressed - releasing keyboard capture');
+            console.log(`[UHID Keyboard] ESC pressed - releasing capture for ${currentUdid}`);
             KeyInputHandler.stopCapture();
             return;
         }
 
         const hidKeyCode = KeyToHidMap.get(event.code);
         if (!hidKeyCode) {
-            console.log(`[KeyInputHandler] No HID mapping for: ${event.code}`);
             return;
         }
 
@@ -75,37 +77,31 @@ export class KeyInputHandler {
             hidModifiers,
         );
 
-        console.log(`[KeyInputHandler] Sending: action=${action}, hidKeyCode=0x${hidKeyCode.toString(16)}`);
+        // UHID Keyboard debug log
+        console.log(`[UHID Keyboard] ${currentUdid}: ${event.code} ${event.type === 'keydown' ? 'DOWN' : 'UP'} (HID: 0x${hidKeyCode.toString(16)})`);
 
-        KeyInputHandler.listeners.forEach((listener) => {
-            listener.onKeyEvent(controlMessage);
-        });
-
-        // Return false to completely prevent browser handling
-        return;
+        currentListener.onKeyEvent(controlMessage);
     };
 
-    private static startCapture(): void {
-        if (KeyInputHandler.isCapturing) return;
-
-        console.log('[KeyInputHandler] Starting keyboard capture');
-        KeyInputHandler.isCapturing = true;
-
-        // Use window with capture phase to intercept BEFORE anything else
+    private static attachEventListeners(): void {
         window.addEventListener('keydown', this.handler as EventListener, true);
         window.addEventListener('keyup', this.handler as EventListener, true);
-
-        // Also block Tab at document level
         document.addEventListener('keydown', this.blockTab, true);
     }
 
-    private static stopCapture(): void {
-        console.log('[KeyInputHandler] Stopping keyboard capture');
-        KeyInputHandler.isCapturing = false;
-
+    private static detachEventListeners(): void {
         window.removeEventListener('keydown', this.handler as EventListener, true);
         window.removeEventListener('keyup', this.handler as EventListener, true);
         document.removeEventListener('keydown', this.blockTab, true);
+    }
+
+    private static stopCapture(): void {
+        if (KeyInputHandler.isCapturing) {
+            this.detachEventListeners();
+        }
+        KeyInputHandler.isCapturing = false;
+        KeyInputHandler.activeListener = null;
+        KeyInputHandler.activeUdid = '';
     }
 
     // Extra blocker specifically for Tab
@@ -117,19 +113,36 @@ export class KeyInputHandler {
         }
     };
 
-    public static addEventListener(listener: KeyEventListener): void {
-        this.listeners.add(listener);
-        if (this.listeners.size === 1) {
-            this.startCapture();
-        }
-        console.log(`[KeyInputHandler] Listener added, total: ${this.listeners.size}, capturing: ${this.isCapturing}`);
-    }
-
-    public static removeEventListener(listener: KeyEventListener): void {
-        this.listeners.delete(listener);
-        if (this.listeners.size === 0) {
+    // Set this listener as the ONLY active one (replaces any previous)
+    public static addEventListener(listener: KeyEventListener, udid: string): void {
+        // If already capturing for a DIFFERENT device, stop that first
+        if (KeyInputHandler.isCapturing && KeyInputHandler.activeUdid !== udid) {
             this.stopCapture();
         }
-        console.log(`[KeyInputHandler] Listener removed, total: ${this.listeners.size}`);
+
+        KeyInputHandler.activeListener = listener;
+        KeyInputHandler.activeUdid = udid;
+
+        if (!KeyInputHandler.isCapturing) {
+            this.attachEventListeners();
+            KeyInputHandler.isCapturing = true;
+        }
+
+        console.log(`[UHID Keyboard] Capture enabled for ${udid}`);
+    }
+
+    public static removeEventListener(listener: KeyEventListener, udid: string): void {
+        if (KeyInputHandler.activeUdid === udid) {
+            console.log(`[UHID Keyboard] Capture disabled for ${udid}`);
+            this.stopCapture();
+        }
+    }
+
+    public static getActiveUdid(): string {
+        return KeyInputHandler.activeUdid;
+    }
+
+    public static isDeviceActive(udid: string): boolean {
+        return KeyInputHandler.activeUdid === udid && KeyInputHandler.isCapturing;
     }
 }
