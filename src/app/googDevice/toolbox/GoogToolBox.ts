@@ -1,7 +1,7 @@
 import { ToolBox } from '../../toolbox/ToolBox';
 import KeyEvent from '../android/KeyEvent';
 import SvgImage from '../../ui/SvgImage';
-import { KeyCodeControlMessage } from '../../controlMessage/KeyCodeControlMessage';
+import { InjectKeycodeMessage } from '../../controlMessage/InjectKeycodeMessage';
 import { ToolBoxButton } from '../../toolbox/ToolBoxButton';
 import { ToolBoxElement } from '../../toolbox/ToolBoxElement';
 import { ToolBoxCheckbox } from '../../toolbox/ToolBoxCheckbox';
@@ -63,7 +63,7 @@ export class GoogToolBox extends ToolBox {
             }
             const { code } = element.optional;
             const action = type === 'mousedown' ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP;
-            const event = new KeyCodeControlMessage(action, code, 0, 0);
+            const event = new InjectKeycodeMessage(action, code, 0, 0);
             client.sendMessage(event);
         };
         const elements: ToolBoxElement<any>[] = list.map((item) => {
