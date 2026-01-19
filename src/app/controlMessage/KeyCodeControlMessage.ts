@@ -21,12 +21,13 @@ export class KeyCodeControlMessage extends ControlMessage {
     }
 
     /**
-     * Generate UHID keyboard HID report (9 bytes total):
-     * Byte 0: Type (100)
-     * Byte 1: Modifiers (HID modifier byte)
-     * Byte 2: Reserved (0)
-     * Byte 3: Keycode (HID Usage ID) - 0 for key release
-     * Bytes 4-8: Reserved (0)
+     * Generate UHID keyboard message (9 bytes total):
+     * Byte 0: Type (100 = TYPE_KEYCODE for UHID)
+     * Byte 1: Action (0=ACTION_DOWN, 1=ACTION_UP)
+     * Byte 2: Keycode (HID Usage ID)
+     * Byte 3: Repeat count
+     * Byte 4: Modifiers (HID modifier byte)
+     * Bytes 5-8: Reserved (0)
      */
     public toBuffer(): Buffer {
         const buffer = Buffer.alloc(KeyCodeControlMessage.PAYLOAD_LENGTH + 1);
@@ -35,17 +36,15 @@ export class KeyCodeControlMessage extends ControlMessage {
         // Type byte (100 = UHID keyboard)
         offset = buffer.writeUInt8(this.type, offset);
 
-        // HID Report (8 bytes)
-        offset = buffer.writeUInt8(this.metaState, offset); // Modifiers
-        offset = buffer.writeUInt8(0, offset); // Reserved
-        // For key release (action=1), send keycode=0
-        const hidKeycode = this.action === 0 ? this.keycode : 0;
-        offset = buffer.writeUInt8(hidKeycode, offset); // Keycode (0 = release)
-        offset = buffer.writeUInt8(0, offset); // Reserved
-        offset = buffer.writeUInt8(0, offset); // Reserved
-        offset = buffer.writeUInt8(0, offset); // Reserved
-        offset = buffer.writeUInt8(0, offset); // Reserved
-        buffer.writeUInt8(0, offset); // Reserved
+        // Message payload (8 bytes)
+        offset = buffer.writeUInt8(this.action, offset);        // Action (0=DOWN, 1=UP)
+        offset = buffer.writeUInt8(this.keycode, offset);       // HID keycode
+        offset = buffer.writeUInt8(this.repeat, offset);        // Repeat count
+        offset = buffer.writeUInt8(this.metaState, offset);     // Modifiers
+        offset = buffer.writeUInt8(0, offset);                  // Reserved
+        offset = buffer.writeUInt8(0, offset);                  // Reserved
+        offset = buffer.writeUInt8(0, offset);                  // Reserved
+        buffer.writeUInt8(0, offset);                           // Reserved
 
         return buffer;
     }
