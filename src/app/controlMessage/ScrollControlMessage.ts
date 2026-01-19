@@ -21,8 +21,13 @@ export class ScrollControlMessage extends ControlMessage {
         const buffer = Buffer.alloc(ScrollControlMessage.PAYLOAD_LENGTH + 1);
         let offset = 0;
         offset = buffer.writeUInt8(this.type, offset);
-        offset = buffer.writeUInt32BE(this.position.point.x, offset);
-        offset = buffer.writeUInt32BE(this.position.point.y, offset);
+
+        // Round and clamp coordinates to valid UInt32 range (0 to 4294967295)
+        const x = Math.max(0, Math.min(0xffffffff, Math.round(this.position.point.x)));
+        const y = Math.max(0, Math.min(0xffffffff, Math.round(this.position.point.y)));
+
+        offset = buffer.writeUInt32BE(x, offset);
+        offset = buffer.writeUInt32BE(y, offset);
         offset = buffer.writeUInt16BE(this.position.screenSize.width, offset);
         offset = buffer.writeUInt16BE(this.position.screenSize.height, offset);
         offset = buffer.writeInt32BE(this.hScroll, offset);

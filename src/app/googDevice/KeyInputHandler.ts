@@ -87,12 +87,14 @@ export class KeyInputHandler {
         window.addEventListener('keydown', this.handler as EventListener, true);
         window.addEventListener('keyup', this.handler as EventListener, true);
         document.addEventListener('keydown', this.blockTab, true);
+        document.addEventListener('keyup', this.blockTab, true);  // Also block keyup for Tab
     }
 
     private static detachEventListeners(): void {
         window.removeEventListener('keydown', this.handler as EventListener, true);
         window.removeEventListener('keyup', this.handler as EventListener, true);
         document.removeEventListener('keydown', this.blockTab, true);
+        document.removeEventListener('keyup', this.blockTab, true);  // Remove keyup blocker too
     }
 
     private static stopCapture(): void {
