@@ -15,13 +15,18 @@ export class KeyInputHandler {
     private static isCapturing: boolean = false;
 
     private static handler = (event: KeyboardEvent): void => {
+        // Debug: Log setiap keyboard event yang masuk
+        console.log(`[UHID Keyboard] 🔑 Event received: ${event.code} ${event.type}, capturing: ${KeyInputHandler.isCapturing}`);
+
         if (!KeyInputHandler.isCapturing || !KeyInputHandler.activeListener) {
+            console.log(`[UHID Keyboard] ⚠️ Skipping event - capturing: ${KeyInputHandler.isCapturing}, hasListener: ${!!KeyInputHandler.activeListener}`);
             return;
         }
 
-        // MUST prevent default for ALL keys including Tab
+        // CRITICAL: Prevent ALL event propagation IMMEDIATELY
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation(); // Stop ALL other listeners from firing
 
         const currentUdid = KeyInputHandler.activeUdid;
         const currentListener = KeyInputHandler.activeListener;
@@ -35,6 +40,7 @@ export class KeyInputHandler {
 
         const hidKeyCode = KeyToHidMap.get(event.code);
         if (!hidKeyCode) {
+            console.log(`[UHID Keyboard] ⚠️ No HID mapping for: ${event.code}`);
             return;
         }
 
@@ -78,16 +84,21 @@ export class KeyInputHandler {
         );
 
         // UHID Keyboard debug log
-        console.log(`[UHID Keyboard] ${currentUdid}: ${event.code} ${event.type === 'keydown' ? 'DOWN' : 'UP'} (HID: 0x${hidKeyCode.toString(16)})`);
+        console.log(`[UHID Keyboard] ✉️ SENDING to ${currentUdid}: ${event.code} ${event.type === 'keydown' ? 'DOWN' : 'UP'} (HID: 0x${hidKeyCode.toString(16)})`);
 
         currentListener.onKeyEvent(controlMessage);
+
+        console.log(`[UHID Keyboard] ✓ Message sent successfully`);
     };
 
     private static attachEventListeners(): void {
-        window.addEventListener('keydown', this.handler as EventListener, true);
-        window.addEventListener('keyup', this.handler as EventListener, true);
-        document.addEventListener('keydown', this.blockTab, true);
-        document.addEventListener('keyup', this.blockTab, true);  // Also block keyup for Tab
+        // Use { capture: true, passive: false } to ensure immediate event blocking
+        const options = { capture: true, passive: false };
+        window.addEventListener('keydown', this.handler as EventListener, options);
+        window.addEventListener('keyup', this.handler as EventListener, options);
+        document.addEventListener('keydown', this.blockTab, options);
+        document.addEventListener('keyup', this.blockTab, options);  // Also block keyup for Tab
+        console.log(`[UHID Keyboard] 🔗 Event listeners attached with options:`, options);
     }
 
     private static detachEventListeners(): void {
@@ -117,8 +128,11 @@ export class KeyInputHandler {
 
     // Set this listener as the ONLY active one (replaces any previous)
     public static addEventListener(listener: KeyEventListener, udid: string): void {
+        console.log(`[UHID Keyboard] 🎯 addEventListener called for ${udid}`);
+
         // If already capturing for a DIFFERENT device, stop that first
         if (KeyInputHandler.isCapturing && KeyInputHandler.activeUdid !== udid) {
+            console.log(`[UHID Keyboard] ⚠️ Switching from ${KeyInputHandler.activeUdid} to ${udid}`);
             this.stopCapture();
         }
 
@@ -126,11 +140,14 @@ export class KeyInputHandler {
         KeyInputHandler.activeUdid = udid;
 
         if (!KeyInputHandler.isCapturing) {
+            console.log(`[UHID Keyboard] 🔧 Attaching global keyboard event listeners...`);
             this.attachEventListeners();
             KeyInputHandler.isCapturing = true;
+            console.log(`[UHID Keyboard] ✅ Event listeners attached successfully`);
         }
 
-        console.log(`[UHID Keyboard] Capture enabled for ${udid}`);
+        console.log(`[UHID Keyboard] 🎹 Capture enabled for ${udid} - All keyboard input will be sent to this device`);
+        console.log(`[UHID Keyboard] ℹ️ Press ESC to disable capture, or uncheck the checkbox`);
     }
 
     public static removeEventListener(listener: KeyEventListener, udid: string): void {

@@ -87,10 +87,20 @@ export class GoogToolBox extends ToolBox {
             SvgImage.Icon.KEYBOARD,
             `capture_keyboard_${udid}_${playerName}`,
         );
-        keyboard.addEventListener('click', (_, el) => {
-            const element = el.getElement();
-            client.setHandleKeyboardEvents(element.checked);
-        });
+        // Handler function untuk keyboard capture
+        const handleKeyboardCapture = <K extends keyof HTMLElementEventMap, T extends HTMLElement>(
+            type: K,
+            element: ToolBoxElement<T>,
+        ) => {
+            const el = element.getElement();
+            const isChecked = (el as unknown as HTMLInputElement).checked;
+            console.log(`[GoogToolBox] Keyboard checkbox ${isChecked ? 'CHECKED' : 'UNCHECKED'} for ${udid}`);
+            // Langsung set event handler tanpa delay
+            client.setHandleKeyboardEvents(isChecked);
+        };
+        // Listen untuk BOTH click dan change events untuk memastikan langsung terdeteksi
+        keyboard.addEventListener('click', handleKeyboardCapture);
+        keyboard.addEventListener('change', handleKeyboardCapture);
         elements.push(keyboard);
 
         if (moreBox) {

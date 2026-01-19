@@ -393,12 +393,17 @@ export class StreamClientScrcpy
 
     public setHandleKeyboardEvents(enabled: boolean): void {
         const udid = this.params.udid;
-        // console.log(`[StreamClient][${udid}] setHandleKeyboardEvents: ${enabled}`);
+        console.log(`[StreamClient][${udid}] ⚡ Setting keyboard capture to: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+
         if (enabled) {
             KeyInputHandler.addEventListener(this, udid);
         } else {
             KeyInputHandler.removeEventListener(this, udid);
         }
+
+        // Verify status setelah set
+        const isActive = KeyInputHandler.isDeviceActive(udid);
+        console.log(`[StreamClient][${udid}] ✓ Keyboard capture status confirmed: ${isActive ? 'ACTIVE' : 'INACTIVE'}`);
     }
 
     public onKeyEvent(event: KeyCodeControlMessage): void {
