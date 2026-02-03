@@ -71,13 +71,15 @@ CURRENT=0
 
 for DEVICE in $DEVICES; do
     CURRENT=$((CURRENT + 1))
-    MODEL=$(adb -s $DEVICE shell getprop ro.product.model 2>/dev/null | tr -d '\r\n' || echo "Unknown")
+    
+    # Tambahan Timeout 2 detik untuk mengambil nama Model agar tidak stuck
+    MODEL=$(timeout 2s adb -s $DEVICE shell getprop ro.product.model 2>/dev/null | tr -d '\r\n')
+    if [ -z "$MODEL" ]; then MODEL="Unknown/TimedOut"; fi
     
     echo -e "${BLUE}[$CURRENT/$DEVICE_COUNT]${NC} $DEVICE ($MODEL)"
     
     # Step 1: Push JAR with 30s Timeout
     echo -e "         ${YELLOW}[1/3] Pushing JAR (30s timeout)...${NC}"
-    # Menggunakan command timeout untuk membatasi durasi adb push
     PUSH_OUTPUT=$(timeout 30s adb -s $DEVICE push "$FULL_JAR_PATH" /data/local/tmp/ 2>&1)
     EXIT_CODE=$?
     
