@@ -75,9 +75,23 @@ for DEVICE in $DEVICES; do
     
     echo -e "${BLUE}[$CURRENT/$DEVICE_COUNT]${NC} $DEVICE ($MODEL)"
     
-    # Step 1: Push JAR
-    echo -e "         ${YELLOW}[1/4] Pushing JAR...${NC}"
-    PUSH_OUTPUT=$(adb -s $DEVICE push "$FULL_JAR_PATH" /data/local/tmp/ 2>&1)
+    # Step 1: Push JAR with 30s Timeout
+    echo -e "         ${YELLOW}[1/3] Pushing JAR (30s timeout)...${NC}"
+    # Menggunakan command timeout untuk membatasi durasi adb push
+    PUSH_OUTPUT=$(timeout 30s adb -s $DEVICE push "$FULL_JAR_PATH" /data/local/tmp/ 2>&1)
+    EXIT_CODE=$?
+    
+    if [ $EXIT_CODE -eq 124 ]; then
+        echo -e "         ${RED}❌ Error: Push timed out after 30 seconds!${NC}"
+        FAILED=$((FAILED + 1))
+        echo ""
+        continue
+    elif [ $EXIT_CODE -ne 0 ]; then
+        echo -e "         ${RED}❌ Error: Push failed ($PUSH_OUTPUT)${NC}"
+        FAILED=$((FAILED + 1))
+        echo ""
+        continue
+    fi
     echo -e "         ${CYAN}$PUSH_OUTPUT${NC}"
     
     sleep 0.2
