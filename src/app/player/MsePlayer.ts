@@ -19,13 +19,21 @@ export class MsePlayer extends BasePlayer {
     public static readonly storageKeyPrefix = 'MseDecoder';
     public static readonly playerFullName = 'H264 Converter';
     public static readonly playerCodeName = 'mse';
+    // public static readonly preferredVideoSettings: VideoSettings = new VideoSettings({
+    //     lockedVideoOrientation: -1,
+    //     bitrate: 7340032,
+    //     maxFps: 60,
+    //     iFrameInterval: 10,
+    //     bounds: new Size(320, 720),
+    //     sendFrameMeta: false,
+    // });
     public static readonly preferredVideoSettings: VideoSettings = new VideoSettings({
-        lockedVideoOrientation: -1,
-        bitrate: 7340032,
-        maxFps: 60,
-        iFrameInterval: 10,
+        bitrate: 4000000,      // ← Ubah dari 7340032 ke 4000000
+        maxFps: 30,            // ← Ubah dari 60 ke 30
         bounds: new Size(320, 720),
+        lockedVideoOrientation: -1,
         sendFrameMeta: false,
+        iFrameInterval: 10,
     });
     private static DEFAULT_FRAMES_PER_FRAGMENT = 1;
     private static DEFAULT_FRAMES_PER_SECOND = 60;
@@ -65,7 +73,7 @@ export class MsePlayer extends BasePlayer {
     protected readonly isChrome = navigator.userAgent.includes('Chrome');
     protected readonly isMac = navigator.platform.startsWith('Mac');
     private MAX_TIME_TO_RECOVER = 200; // ms
-    private MAX_BUFFER = this.isSafari ? 2 : this.isChrome && this.isMac ? 0.9 : 0.2;
+    private MAX_BUFFER = this.isSafari ? 2 : this.isChrome && this.isMac ? 0.4 : 0.2;
     private MAX_AHEAD = -0.2;
 
     public static isSupported(): boolean {

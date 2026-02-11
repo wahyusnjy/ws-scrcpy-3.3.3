@@ -365,4 +365,84 @@ export class AdbUtils {
         const props = await client.getProperties(serial);
         return props['ro.product.model'] || 'Unknown device';
     }
+
+    /**
+     * Set device screen density (DPI)
+     * @param serial - Device serial number
+     * @param density - Target density value (e.g., 160, 240, 320, 480)
+     * @returns Success status and message
+     */
+    public static async setDeviceDensity(serial: string, density: number): Promise<{ success: boolean; message: string }> {
+        try {
+            const client = AdbExtended.createClient();
+            const stream = await client.shell(serial, `wm density ${density}`);
+            await AdbExtended.util.readAll(stream);
+
+            // Verify the change
+            const verifyStream = await client.shell(serial, 'wm density');
+            const result = await AdbExtended.util.readAll(stream);
+            const output = result.toString().trim();
+
+            return {
+                success: true,
+                message: `Density set to ${density} for device ${serial}. ${output}`,
+            };
+        } catch (error: any) {
+            console.error(`Failed to set density for ${serial}:`, error.message);
+            return {
+                success: false,
+                message: `Failed to set density: ${error.message}`,
+            };
+        }
+    }
+
+    /**
+     * Reset device screen density to default
+     * @param serial - Device serial number
+     * @returns Success status and message
+     */
+    public static async resetDeviceDensity(serial: string): Promise<{ success: boolean; message: string }> {
+        try {
+            const client = AdbExtended.createClient();
+            const stream = await client.shell(serial, 'wm density reset');
+            await AdbExtended.util.readAll(stream);
+
+            return {
+                success: true,
+                message: `Density reset to default for device ${serial}`,
+            };
+        } catch (error: any) {
+            console.error(`Failed to reset density for ${serial}:`, error.message);
+            return {
+                success: false,
+                message: `Failed to reset density: ${error.message}`,
+            };
+        }
+    }
+
+    /**
+     * Get current device density
+     * @param serial - Device serial number
+     * @returns Current density value
+     */
+    public static async getDeviceDensity(serial: string): Promise<{ physical: number; override?: number }> {
+        try {
+            const client = AdbExtended.createClient();
+            const stream = await client.shell(serial, 'wm density');
+            const result = await AdbExtended.util.readAll(stream);
+            const output = result.toString().trim();
+
+            // Parse output like "Physical density: 420" or "Physical density: 420\nOverride density: 320"
+            const physicalMatch = output.match(/Physical density:\s*(\d+)/);
+            const overrideMatch = output.match(/Override density:\s*(\d+)/);
+
+            return {
+                physical: physicalMatch ? parseInt(physicalMatch[1], 10) : 0,
+                override: overrideMatch ? parseInt(overrideMatch[1], 10) : undefined,
+            };
+        } catch (error: any) {
+            console.error(`Failed to get density for ${serial}:`, error.message);
+            throw error;
+        }
+    }
 }

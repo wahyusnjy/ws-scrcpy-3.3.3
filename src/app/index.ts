@@ -102,6 +102,14 @@ window.onload = async function (): Promise<void> {
     tools.push(FileListingClient);
     /// #endif
 
+    // Device Density Manager
+    const { DensityClient } = await import('./googDevice/client/DensityClient');
+    if (action === DensityClient.ACTION) {
+        DensityClient.start(DensityClient.parseParameters(parsedQuery));
+        return;
+    }
+    tools.push(DensityClient);
+
     if (tools.length) {
         const { DeviceTracker } = await import('./googDevice/client/DeviceTracker');
         tools.forEach((tool) => {

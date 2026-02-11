@@ -24,10 +24,13 @@ export class FeaturedInteractionHandler extends InteractionHandler {
         'wheel',
     ];
     private static readonly keyEventsNames: KeyEventNames[] = ['keydown', 'keyup'];
-    public static SCROLL_EVENT_THROTTLING_TIME = 30; // one event per 50ms
+    public static SCROLL_EVENT_THROTTLING_TIME = 30; // one event per 30ms for scroll
+    public static MOUSE_MOVE_THROTTLING_TIME = 16; // one event per 16ms (~60fps) for mouse move
     private readonly storedFromMouseEvent = new Map<number, TouchControlMessage>();
     private readonly storedFromTouchEvent = new Map<number, TouchControlMessage>();
     private lastScrollEvent?: { time: number; hScroll: number; vScroll: number };
+    private lastMouseMoveEvent?: { time: number; x: number; y: number };
+    private mouseUpSafetyTimer?: number;
 
     constructor(player: BasePlayer, public readonly listener: InteractionHandlerListener) {
         super(player, FeaturedInteractionHandler.touchEventsNames, FeaturedInteractionHandler.keyEventsNames);
@@ -71,6 +74,24 @@ export class FeaturedInteractionHandler extends InteractionHandler {
     }
 
     protected onInteraction(event: MouseEvent | TouchEvent): void {
+        // Check if the event target is an interactive element (input, textarea, button, select, etc.)
+        const target = event.target as HTMLElement;
+        const isInteractiveElement = target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.tagName === 'BUTTON' ||
+            target.tagName === 'SELECT' ||
+            target.tagName === 'LABEL' ||
+            target.isContentEditable ||
+            target.closest('.more-box') !== null // Allow interaction with any element inside more-box
+        );
+
+        // If it's an interactive element, don't interfere with the event
+        if (isInteractiveElement) {
+            // console.log(TAG, 'Skipping interaction handler for interactive element:', target.tagName);
+            return;
+        }
+
         // console.log(TAG, 'onInteraction called, event type:', event.type);
         const screenInfo = this.player.getScreenInfo();
         // console.log(TAG, 'screenInfo:', screenInfo);
@@ -87,6 +108,56 @@ export class FeaturedInteractionHandler extends InteractionHandler {
                 messages = this.buildScrollEvent(event, screenInfo);
             } else {
                 storage = this.storedFromMouseEvent;
+
+                // Throttle mousemove events to prevent overwhelming the device
+                if (event.type === 'mousemove' && event.buttons > 0) {
+                    const now = Date.now();
+                    const x = event.clientX;
+                    const y = event.clientY;
+
+                    if (this.lastMouseMoveEvent) {
+                        const timeSinceLastMove = now - this.lastMouseMoveEvent.time;
+                        const distance = Math.sqrt(
+                            Math.pow(x - this.lastMouseMoveEvent.x, 2) +
+                            Math.pow(y - this.lastMouseMoveEvent.y, 2)
+                        );
+
+                        // Skip if too soon and movement is small
+                        if (timeSinceLastMove < FeaturedInteractionHandler.MOUSE_MOVE_THROTTLING_TIME && distance < 5) {
+                            return;
+                        }
+                    }
+
+                    this.lastMouseMoveEvent = { time: now, x, y };
+                }
+
+                // Handle mousedown - set safety timer
+                if (event.type === 'mousedown') {
+                    // Clear any existing safety timer
+                    if (this.mouseUpSafetyTimer) {
+                        window.clearTimeout(this.mouseUpSafetyTimer);
+                    }
+
+                    // Set a safety timer to ensure ACTION_UP is sent if mouseup is missed
+                    this.mouseUpSafetyTimer = window.setTimeout(() => {
+                        console.warn(TAG, 'Safety timer triggered - sending ACTION_UP to prevent freeze');
+                        this.storedFromMouseEvent.forEach((message) => {
+                            this.listener.sendMessage(InteractionHandler.createEmulatedMessage(MotionEvent.ACTION_UP, message));
+                        });
+                        this.storedFromMouseEvent.clear();
+                        this.mouseUpSafetyTimer = undefined;
+                    }, 5000); // 5 second safety timeout
+                }
+
+                // Handle mouseup - clear safety timer
+                if (event.type === 'mouseup') {
+                    if (this.mouseUpSafetyTimer) {
+                        window.clearTimeout(this.mouseUpSafetyTimer);
+                        this.mouseUpSafetyTimer = undefined;
+                    }
+                    this.lastMouseMoveEvent = undefined;
+                }
+
                 messages = this.buildTouchEvent(event, screenInfo, storage);
             }
             if (this.over) {
@@ -135,6 +206,17 @@ export class FeaturedInteractionHandler extends InteractionHandler {
     private onMouseLeave = (): void => {
         this.lastPosition = undefined;
         this.over = false;
+
+        // Clear safety timer
+        if (this.mouseUpSafetyTimer) {
+            window.clearTimeout(this.mouseUpSafetyTimer);
+            this.mouseUpSafetyTimer = undefined;
+        }
+
+        // Clear mouse move tracking
+        this.lastMouseMoveEvent = undefined;
+
+        // Send ACTION_UP for any stored mouse events
         this.storedFromMouseEvent.forEach((message) => {
             this.listener.sendMessage(InteractionHandler.createEmulatedMessage(MotionEvent.ACTION_UP, message));
         });
@@ -144,6 +226,13 @@ export class FeaturedInteractionHandler extends InteractionHandler {
 
     public release(): void {
         super.release();
+
+        // Clear safety timer
+        if (this.mouseUpSafetyTimer) {
+            window.clearTimeout(this.mouseUpSafetyTimer);
+            this.mouseUpSafetyTimer = undefined;
+        }
+
         this.tag.removeEventListener('mouseleave', this.onMouseLeave);
         this.tag.removeEventListener('mouseenter', this.onMouseEnter);
         this.tag.removeEventListener('mousedown', this.onDirectMouseDown);

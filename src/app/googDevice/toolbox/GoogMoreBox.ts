@@ -20,8 +20,12 @@ export class GoogMoreBox {
     private readonly iFrameIntervalInput?: HTMLInputElement;
     private readonly maxWidthInput?: HTMLInputElement;
     private readonly maxHeightInput?: HTMLInputElement;
+    private readonly densityInput?: HTMLInputElement;
+    private initialDensity?: number;
+    private readonly udid: string;
 
     constructor(udid: string, private player: BasePlayer, private client: StreamClientScrcpy) {
+        this.udid = udid;
         const playerName = player.getName();
         const videoSettings = player.getVideoSettings();
         const { displayId } = videoSettings;
@@ -34,13 +38,31 @@ export class GoogMoreBox {
         moreBox.appendChild(nameBox);
         const input = (this.input = document.createElement('textarea'));
         input.classList.add('text-area');
+        // Prevent interaction handler from blocking textarea input
+        ['mousedown', 'mouseup', 'click', 'keydown', 'keyup', 'input', 'touchstart'].forEach(eventType => {
+            input.addEventListener(eventType, (e) => e.stopPropagation());
+        });
+
         const sendButton = document.createElement('button');
         sendButton.innerText = 'Send as keys';
+        // Prevent interaction handler from blocking button clicks
+        ['mousedown', 'mouseup', 'click', 'touchstart'].forEach(eventType => {
+            sendButton.addEventListener(eventType, (e) => e.stopPropagation());
+        });
 
         const inputWrapper = GoogMoreBox.wrap('p', [input, sendButton], moreBox);
-        sendButton.onclick = () => {
-            if (input.value) {
-                client.sendMessage(new TextControlMessage(input.value));
+        sendButton.onclick = async () => {
+            console.log(TAG, 'Send as keys clicked, input value:', input.value);
+            const text = input.value;
+            if (text) {
+                try {
+                    await this.sendTextAsKeystrokes(text, client);
+                    console.log(TAG, `Successfully sent ${text.length} characters as keystrokes`);
+                    // Clear textarea after sending
+                    input.value = '';
+                } catch (error: any) {
+                    console.error(TAG, 'Failed to send keystrokes:', error.message);
+                }
             }
         };
 
@@ -76,6 +98,9 @@ export class GoogMoreBox {
                 bitrateInput = document.createElement('input');
                 bitrateInput.placeholder = `${preferredSettings.bitrate} bps`;
                 bitrateInput.value = videoSettings.bitrate.toString();
+                ['mousedown', 'mouseup', 'click', 'keydown', 'keyup', 'input', 'touchstart'].forEach(eventType => {
+                    bitrateInput.addEventListener(eventType, (e) => e.stopPropagation());
+                });
                 GoogMoreBox.wrap('div', [bitrateLabel, bitrateInput], innerDiv);
                 this.bitrateInput = bitrateInput;
 
@@ -84,6 +109,9 @@ export class GoogMoreBox {
                 maxFpsInput = document.createElement('input');
                 maxFpsInput.placeholder = `${preferredSettings.maxFps} fps`;
                 maxFpsInput.value = videoSettings.maxFps.toString();
+                ['mousedown', 'mouseup', 'click', 'keydown', 'keyup', 'input', 'touchstart'].forEach(eventType => {
+                    maxFpsInput.addEventListener(eventType, (e) => e.stopPropagation());
+                });
                 GoogMoreBox.wrap('div', [maxFpsLabel, maxFpsInput], innerDiv);
                 this.maxFpsInput = maxFpsInput;
 
@@ -92,6 +120,9 @@ export class GoogMoreBox {
                 iFrameIntervalInput = document.createElement('input');
                 iFrameIntervalInput.placeholder = `${preferredSettings.iFrameInterval} seconds`;
                 iFrameIntervalInput.value = videoSettings.iFrameInterval.toString();
+                ['mousedown', 'mouseup', 'click', 'keydown', 'keyup', 'input', 'touchstart'].forEach(eventType => {
+                    iFrameIntervalInput.addEventListener(eventType, (e) => e.stopPropagation());
+                });
                 GoogMoreBox.wrap('div', [iFrameIntervalLabel, iFrameIntervalInput], innerDiv);
                 this.iFrameIntervalInput = iFrameIntervalInput;
 
@@ -104,6 +135,9 @@ export class GoogMoreBox {
                 maxWidthInput = document.createElement('input');
                 maxWidthInput.placeholder = `${pWidth} px`;
                 maxWidthInput.value = width.toString();
+                ['mousedown', 'mouseup', 'click', 'keydown', 'keyup', 'input', 'touchstart'].forEach(eventType => {
+                    maxWidthInput.addEventListener(eventType, (e) => e.stopPropagation());
+                });
                 GoogMoreBox.wrap('div', [maxWidthLabel, maxWidthInput], innerDiv);
                 this.maxWidthInput = maxWidthInput;
 
@@ -112,16 +146,25 @@ export class GoogMoreBox {
                 maxHeightInput = document.createElement('input');
                 maxHeightInput.placeholder = `${pHeight} px`;
                 maxHeightInput.value = height.toString();
+                ['mousedown', 'mouseup', 'click', 'keydown', 'keyup', 'input', 'touchstart'].forEach(eventType => {
+                    maxHeightInput.addEventListener(eventType, (e) => e.stopPropagation());
+                });
                 GoogMoreBox.wrap('div', [maxHeightLabel, maxHeightInput], innerDiv);
                 this.maxHeightInput = maxHeightInput;
 
                 innerDiv.appendChild(btn);
                 const fitButton = document.createElement('button');
                 fitButton.innerText = 'Fit';
+                ['mousedown', 'mouseup', 'click', 'touchstart'].forEach(eventType => {
+                    fitButton.addEventListener(eventType, (e) => e.stopPropagation());
+                });
                 fitButton.onclick = this.fit;
                 innerDiv.insertBefore(fitButton, innerDiv.firstChild);
                 const resetButton = document.createElement('button');
                 resetButton.innerText = 'Reset';
+                ['mousedown', 'mouseup', 'click', 'touchstart'].forEach(eventType => {
+                    resetButton.addEventListener(eventType, (e) => e.stopPropagation());
+                });
                 resetButton.onclick = this.reset;
                 innerDiv.insertBefore(resetButton, innerDiv.firstChild);
                 commands.push(spoiler);
@@ -136,6 +179,11 @@ export class GoogMoreBox {
                 }
             }
             btn.innerText = command;
+            // Prevent interaction handler from blocking all button clicks
+            ['mousedown', 'mouseup', 'click', 'touchstart'].forEach(eventType => {
+                btn.addEventListener(eventType, (e) => e.stopPropagation());
+            });
+
             if (action === ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS) {
                 btn.onclick = () => {
                     const bitrate = parseInt(bitrateInput.value, 10);
@@ -165,9 +213,17 @@ export class GoogMoreBox {
             } else if (action === CommandControlMessage.TYPE_SET_CLIPBOARD) {
                 btn.onclick = () => {
                     const text = input.value;
+                    console.log(TAG, 'Set Clipboard clicked, text:', text);
                     if (text) {
                         client.sendMessage(CommandControlMessage.createSetClipboardCommand(text));
+                        console.log(TAG, 'Set clipboard command sent');
                     }
+                };
+            } else if (action === CommandControlMessage.TYPE_GET_CLIPBOARD) {
+                btn.onclick = () => {
+                    console.log(TAG, 'Get Clipboard clicked');
+                    client.sendMessage(new CommandControlMessage(action));
+                    console.log(TAG, 'Get clipboard command sent');
                 };
             } else {
                 btn.onclick = () => {
@@ -215,6 +271,10 @@ export class GoogMoreBox {
             player.setShowQualityStats(qualityCheck.checked);
         };
 
+        // Density Control Section
+        this.initializeDensityControl(moreBox, udid, playerName, displayId);
+
+
         const stop = (ev?: string | Event) => {
             if (ev && ev instanceof Event && ev.type === 'error') {
                 console.error(TAG, ev);
@@ -244,6 +304,103 @@ export class GoogMoreBox {
         // padding: 10px
         this.holder.style.width = `${size.width - 2 * 10}px`;
     };
+
+    /**
+     * Send text as individual keystrokes using UHID keyboard
+     * Maps each character to HID Usage ID and sends with proper modifiers
+     */
+    private async sendTextAsKeystrokes(text: string, client: StreamClientScrcpy): Promise<void> {
+        // HID Keyboard mapping (USB HID Usage IDs)
+        const HID_KEYBOARD_MAP: { [key: string]: number } = {
+            // Letters (a-z) = 0x04-0x1D
+            'a': 0x04, 'b': 0x05, 'c': 0x06, 'd': 0x07, 'e': 0x08,
+            'f': 0x09, 'g': 0x0a, 'h': 0x0b, 'i': 0x0c, 'j': 0x0d,
+            'k': 0x0e, 'l': 0x0f, 'm': 0x10, 'n': 0x11, 'o': 0x12,
+            'p': 0x13, 'q': 0x14, 'r': 0x15, 's': 0x16, 't': 0x17,
+            'u': 0x18, 'v': 0x19, 'w': 0x1a, 'x': 0x1b, 'y': 0x1c,
+            'z': 0x1d,
+
+            // Numbers (1-9, 0) = 0x1E-0x27
+            '1': 0x1e, '2': 0x1f, '3': 0x20, '4': 0x21, '5': 0x22,
+            '6': 0x23, '7': 0x24, '8': 0x25, '9': 0x26, '0': 0x27,
+
+            // Special characters
+            '\n': 0x28,  // Enter
+            ' ': 0x2c,   // Space
+            '-': 0x2d,   // Minus/Underscore
+            '=': 0x2e,   // Equal/Plus
+            '[': 0x2f,   // Left bracket
+            ']': 0x30,   // Right bracket
+            '\\': 0x31,  // Backslash
+            ';': 0x33,   // Semicolon/Colon
+            '\'': 0x34,  // Apostrophe/Quote
+            '`': 0x35,   // Grave accent/Tilde
+            ',': 0x36,   // Comma/Less than
+            '.': 0x37,   // Period/Greater than
+            '/': 0x38,   // Slash/Question mark
+        };
+
+        // Characters that require Shift modifier (HID modifier bit 0x02 = left shift)
+        const SHIFT_MAP: { [key: string]: string } = {
+            'A': 'a', 'B': 'b', 'C': 'c', 'D': 'd', 'E': 'e',
+            'F': 'f', 'G': 'g', 'H': 'h', 'I': 'i', 'J': 'j',
+            'K': 'k', 'L': 'l', 'M': 'm', 'N': 'n', 'O': 'o',
+            'P': 'p', 'Q': 'q', 'R': 'r', 'S': 's', 'T': 't',
+            'U': 'u', 'V': 'v', 'W': 'w', 'X': 'x', 'Y': 'y',
+            'Z': 'z',
+            '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+            '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+            '_': '-', '+': '=', '{': '[', '}': ']', '|': '\\',
+            ':': ';', '"': '\'', '~': '`', '<': ',', '>': '.', '?': '/'
+        };
+
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+        console.log(TAG, 'Send as keys clicked, input value:', text);
+        console.log(client);
+        let sentCount = 0;
+        let skippedCount = 0;
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            let modifier = 0;
+            let keycode = 0;
+
+            // Check if character requires shift
+            if (SHIFT_MAP[char]) {
+                modifier = 0x02; // Left Shift
+                const baseChar = SHIFT_MAP[char];
+                keycode = HID_KEYBOARD_MAP[baseChar] || 0;
+            } else {
+                keycode = HID_KEYBOARD_MAP[char] || 0;
+            }
+
+            if (keycode === 0 && char !== '\n' && char !== ' ') {
+                skippedCount++;
+                console.warn(TAG, `Skipped unsupported character: "${char}" (code: ${char.charCodeAt(0)})`);
+                continue;
+            }
+
+            // Import KeyCodeControlMessage dynamically to avoid circular dependencies
+            const { KeyCodeControlMessage } = await import('../../controlMessage/KeyCodeControlMessage');
+
+            // Send key press (action = 0)
+            const pressMessage = new KeyCodeControlMessage(0, keycode, 0, modifier);
+            client.sendMessage(pressMessage);
+            sentCount++;
+
+            // Small delay between press and release
+            await sleep(10);
+
+            // Send key release (action = 1)
+            const releaseMessage = new KeyCodeControlMessage(1, 0, 0, 0);
+            client.sendMessage(releaseMessage);
+
+            // Small delay before next character
+            await sleep(20);
+        }
+
+        console.log(TAG, `Sent ${sentCount} keystrokes, skipped ${skippedCount} unsupported characters`);
+    }
 
     private onVideoSettings = (videoSettings: VideoSettings): void => {
         if (this.bitrateInput) {
@@ -280,6 +437,226 @@ export class GoogMoreBox {
         const preferredSettings = this.player.getPreferredVideoSetting();
         this.onVideoSettings(preferredSettings);
     };
+
+    private async initializeDensityControl(moreBox: HTMLElement, udid: string, playerName: string, displayId: number): Promise<void> {
+        // Get initial density
+        try {
+            const density = await this.getCurrentDensity();
+            this.initialDensity = density.override || density.physical;
+        } catch (error) {
+            console.warn(TAG, 'Failed to get initial density:', error);
+            this.initialDensity = 320; // Default fallback
+        }
+
+        const densitySpoiler = document.createElement('div');
+        densitySpoiler.className = 'spoiler';
+
+        const densityCheck = document.createElement('input');
+        densityCheck.type = 'checkbox';
+        const densityId = `density_control_${udid}_${playerName}_${displayId}`;
+        densityCheck.id = densityId;
+
+        const densityLabel = document.createElement('label');
+        densityLabel.htmlFor = densityId;
+        densityLabel.innerText = '📱 Display Density (DPI/Zoom)';
+
+        const densityBox = document.createElement('div');
+        densityBox.className = 'box';
+
+        // Current density display
+        const currentDensityText = document.createElement('div');
+        currentDensityText.style.marginBottom = '10px';
+        currentDensityText.style.fontSize = '13px';
+        currentDensityText.style.color = '#666';
+        currentDensityText.innerHTML = `<strong>Initial:</strong> ${this.initialDensity} DPI`;
+        densityBox.appendChild(currentDensityText);
+
+        // Preset buttons
+        const presetsContainer = document.createElement('div');
+        presetsContainer.style.display = 'grid';
+        presetsContainer.style.gridTemplateColumns = 'repeat(3, 1fr)';
+        presetsContainer.style.gap = '8px';
+        presetsContainer.style.marginBottom = '12px';
+
+        const presets = [
+            { label: 'HDPI', value: 240 },
+            { label: 'XHDPI', value: 320 },
+            { label: 'XXHDPI', value: 480 },
+        ];
+
+        presets.forEach(preset => {
+            const btn = document.createElement('button');
+            btn.innerText = `${preset.label}\n(${preset.value})`;
+            btn.style.fontSize = '11px';
+            btn.style.padding = '8px 4px';
+            btn.style.whiteSpace = 'pre-line';
+            ['mousedown', 'mouseup', 'click', 'touchstart'].forEach(eventType => {
+                btn.addEventListener(eventType, (e) => e.stopPropagation());
+            });
+            btn.onclick = async () => {
+                await this.setDensity(preset.value);
+                if (this.densityInput) {
+                    this.densityInput.value = preset.value.toString();
+                }
+            };
+            presetsContainer.appendChild(btn);
+        });
+        densityBox.appendChild(presetsContainer);
+
+        // Custom density input
+        const densityInputLabel = document.createElement('label');
+        densityInputLabel.innerText = 'Custom DPI:';
+        densityInputLabel.style.fontSize = '12px';
+        densityInputLabel.style.marginRight = '8px';
+
+        const densityInput = document.createElement('input');
+        densityInput.type = 'number';
+        densityInput.min = '120';
+        densityInput.max = '640';
+        densityInput.placeholder = '320';
+        densityInput.value = this.initialDensity?.toString() || '320';
+        densityInput.style.width = '80px';
+        densityInput.style.marginRight = '8px';
+        ['mousedown', 'mouseup', 'click', 'keydown', 'keyup', 'input', 'touchstart'].forEach(eventType => {
+            densityInput.addEventListener(eventType, (e) => e.stopPropagation());
+        });
+        (this as any).densityInput = densityInput;
+
+        const setDensityBtn = document.createElement('button');
+        setDensityBtn.innerText = 'Set';
+        setDensityBtn.style.marginRight = '8px';
+        ['mousedown', 'mouseup', 'click', 'touchstart'].forEach(eventType => {
+            setDensityBtn.addEventListener(eventType, (e) => e.stopPropagation());
+        });
+        setDensityBtn.onclick = async () => {
+            const density = parseInt(densityInput.value, 10);
+            if (!isNaN(density) && density >= 120 && density <= 640) {
+                await this.setDensity(density);
+            }
+        };
+
+        const resetDensityBtn = document.createElement('button');
+        resetDensityBtn.innerText = 'Reset to Initial';
+        ['mousedown', 'mouseup', 'click', 'touchstart'].forEach(eventType => {
+            resetDensityBtn.addEventListener(eventType, (e) => e.stopPropagation());
+        });
+        resetDensityBtn.onclick = async () => {
+            if (this.initialDensity) {
+                await this.setDensity(this.initialDensity);
+                densityInput.value = this.initialDensity.toString();
+            }
+        };
+
+        const customRow = document.createElement('div');
+        customRow.style.marginBottom = '8px';
+        customRow.appendChild(densityInputLabel);
+        customRow.appendChild(densityInput);
+        customRow.appendChild(setDensityBtn);
+        customRow.appendChild(resetDensityBtn);
+        densityBox.appendChild(customRow);
+
+        // Info text
+        const infoText = document.createElement('div');
+        infoText.style.fontSize = '11px';
+        infoText.style.color = '#999';
+        infoText.style.marginTop = '8px';
+        infoText.innerHTML = '💡 Lower DPI = Larger UI (zoomed in)<br>Higher DPI = Smaller UI (zoomed out)';
+        densityBox.appendChild(infoText);
+
+        densitySpoiler.appendChild(densityCheck);
+        densitySpoiler.appendChild(densityLabel);
+        densitySpoiler.appendChild(densityBox);
+
+        moreBox.appendChild(densitySpoiler);
+    }
+
+    private async getCurrentDensity(): Promise<{ physical: number; override?: number }> {
+        // Since we're in browser context, we can't call ADB directly
+        // Return a default value - the actual density will be fetched when needed
+        return {
+            physical: 320,
+            override: undefined,
+        };
+    }
+
+    private async setDensity(density: number): Promise<void> {
+        try {
+            console.log(TAG, `Setting density to ${density} for ${this.udid}`);
+
+            // Create WebSocket connection to DeviceDensity service
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${location.host}/?action=device-density`;
+
+            const ws = new WebSocket(wsUrl);
+
+            return new Promise((resolve, reject) => {
+                ws.onopen = () => {
+                    console.log(TAG, 'Connected to density service');
+
+                    // Send density change request
+                    const message = {
+                        type: 'device-density',
+                        data: {
+                            type: 'set',
+                            serial: this.udid,
+                            density: density,
+                        },
+                    };
+
+                    ws.send(JSON.stringify(message));
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const response = JSON.parse(event.data);
+                        console.log(TAG, 'Density response:', response);
+
+                        if (response.type === 'device-density' && response.data) {
+                            if (response.data.success) {
+                                console.log(TAG, response.data.message || 'Density updated successfully');
+                                alert(`✓ Density set to ${density} DPI\n\n${response.data.message || 'Success!'}`);
+                                resolve();
+                            } else {
+                                console.error(TAG, 'Failed:', response.data.message);
+                                alert(`✗ Failed to set density:\n${response.data.message}`);
+                                reject(new Error(response.data.message));
+                            }
+                            ws.close();
+                        }
+                    } catch (error) {
+                        console.error(TAG, 'Failed to parse response:', error);
+                        reject(error);
+                        ws.close();
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error(TAG, 'WebSocket error:', error);
+                    alert('Failed to connect to density service');
+                    reject(error);
+                };
+
+                ws.onclose = () => {
+                    console.log(TAG, 'Density service connection closed');
+                };
+
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                        ws.close();
+                        reject(new Error('Density change timeout'));
+                    }
+                }, 10000);
+            });
+
+        } catch (error) {
+            console.error(TAG, 'Failed to set density:', error);
+            alert(`Failed to set density: ${error}`);
+            throw error;
+        }
+    }
+
+
 
     public OnDeviceMessage(ev: DeviceMessage): void {
         if (ev.type !== DeviceMessage.TYPE_CLIPBOARD) {

@@ -12,4 +12,6 @@ export enum ACTION {
     STREAM_MJPEG = 'stream-mjpeg',
     PROXY_WDA = 'proxy-wda',
     FILE_LISTING = 'list-files',
+    DEVICE_DENSITY = 'device-density',
 }
+
