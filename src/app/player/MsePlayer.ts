@@ -28,12 +28,12 @@ export class MsePlayer extends BasePlayer {
     //     sendFrameMeta: false,
     // });
     public static readonly preferredVideoSettings: VideoSettings = new VideoSettings({
-        bitrate: 4000000,      // ← Ubah dari 7340032 ke 4000000
-        maxFps: 30,            // ← Ubah dari 60 ke 30
+        bitrate: 4000000,      // 4 Mbps - balance antara kualitas & memory
+        maxFps: 30,            // 30 fps - smooth & hemat resource
         bounds: new Size(320, 720),
         lockedVideoOrientation: -1,
         sendFrameMeta: false,
-        iFrameInterval: 10,
+        iFrameInterval: 2,     // ← Ubah dari 10 ke 2: I-frame setiap 2 detik = startup lebih cepat!
     });
     private static DEFAULT_FRAMES_PER_FRAGMENT = 1;
     private static DEFAULT_FRAMES_PER_SECOND = 60;
@@ -72,7 +72,7 @@ export class MsePlayer extends BasePlayer {
     protected readonly isSafari = !!(window as unknown as any)['safari'];
     protected readonly isChrome = navigator.userAgent.includes('Chrome');
     protected readonly isMac = navigator.platform.startsWith('Mac');
-    private MAX_TIME_TO_RECOVER = 200; // ms
+    private MAX_TIME_TO_RECOVER = 100; // ms - lebih agresif agar cepat recover dari stall
     private MAX_BUFFER = this.isSafari ? 2 : this.isChrome && this.isMac ? 0.4 : 0.2;
     private MAX_AHEAD = -0.2;
 
