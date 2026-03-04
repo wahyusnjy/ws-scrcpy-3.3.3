@@ -55,7 +55,7 @@ export class MsePlayer extends BasePlayer {
     private converter?: VideoConverter;
     private videoStats: QualityStats[] = [];
     private noDecodedFramesSince = -1;
-    private currentTimeNotChangedSince = -1;
+    // currentTimeNotChangedSince DIHAPUS: menyebabkan player restart saat layar static
     private bigBufferSince = -1;
     private aheadOfBufferSince = -1;
     public fpf: number = MsePlayer.DEFAULT_FRAMES_PER_FRAGMENT;
@@ -72,8 +72,9 @@ export class MsePlayer extends BasePlayer {
     protected readonly isSafari = !!(window as unknown as any)['safari'];
     protected readonly isChrome = navigator.userAgent.includes('Chrome');
     protected readonly isMac = navigator.platform.startsWith('Mac');
-    private MAX_TIME_TO_RECOVER = 100; // ms - lebih agresif agar cepat recover dari stall
-    private MAX_BUFFER = this.isSafari ? 2 : this.isChrome && this.isMac ? 0.4 : 0.2;
+    private MAX_TIME_TO_RECOVER = 300; // ms
+    // MAX_BUFFER=0 → tidak pakai buffer, selalu jump ke frame terbaru
+    private MAX_BUFFER = 0;
     private MAX_AHEAD = -0.2;
 
     public static isSupported(): boolean {
@@ -351,11 +352,14 @@ export class MsePlayer extends BasePlayer {
     }
 
     protected checkForBadState(): void {
-        // Workaround for stalled playback (`stalled` event is not fired, but the image freezes)
+        // Dipanggil setiap kali ada I-frame baru masuk.
+        // Strategy: selalu jump ke buffered.end() agar menampilkan frame terbaru (live view, no delay).
+        // Tidak pakai currentTimeNotChangedSince karena itu menyebabkan restart saat layar static.
         const { currentTime } = this.tag;
         const now = Date.now();
-        // let reasonToJump = '';
         let hasReasonToJump = false;
+
+        // Check: ada frame masuk tapi tidak ada yang decoded (decoder stuck)
         if (this.momentumQualityStats) {
             if (this.momentumQualityStats.decodedFrames === 0 && this.momentumQualityStats.inputFrames > 0) {
                 if (this.noDecodedFramesSince === -1) {
@@ -363,7 +367,6 @@ export class MsePlayer extends BasePlayer {
                 } else {
                     const time = now - this.noDecodedFramesSince;
                     if (time > this.MAX_TIME_TO_RECOVER) {
-                        // reasonToJump = `No frames decoded for ${time} ms.`;
                         hasReasonToJump = true;
                     }
                 }
@@ -371,73 +374,56 @@ export class MsePlayer extends BasePlayer {
                 this.noDecodedFramesSince = -1;
             }
         }
-        if (currentTime === this.lastTime && this.currentTimeNotChangedSince === -1) {
-            this.currentTimeNotChangedSince = now;
-        } else {
-            this.currentTimeNotChangedSince = -1;
-        }
+
         this.lastTime = currentTime;
+
         if (this.tag.buffered.length) {
             const end = this.tag.buffered.end(0);
             const buffered = end - currentTime;
 
-            if ((end | 0) - currentTime > this.MAX_BUFFER) {
-                if (this.bigBufferSince === -1) {
-                    this.bigBufferSince = now;
-                } else {
-                    const time = now - this.bigBufferSince;
-                    if (time > this.MAX_TIME_TO_RECOVER) {
-                        // reasonToJump = `Buffer is bigger then ${this.MAX_BUFFER} (${buffered.toFixed(
-                        //     3,
-                        // )}) for ${time} ms.`;
-                        hasReasonToJump = true;
-                    }
-                }
+            // Selalu jump ke end saat ada I-frame baru (MAX_BUFFER = 0)
+            // Ini memastikan selalu menampilkan frame terbaru, bukan frame lama
+            if (buffered > this.MAX_BUFFER) {
+                hasReasonToJump = true;
+                this.bigBufferSince = -1;
             } else {
                 this.bigBufferSince = -1;
             }
+
+            // Check: currentTime sudah melewati buffer end (ahead of buffer)
             if (buffered < this.MAX_AHEAD) {
                 if (this.aheadOfBufferSince === -1) {
                     this.aheadOfBufferSince = now;
                 } else {
                     const time = now - this.aheadOfBufferSince;
                     if (time > this.MAX_TIME_TO_RECOVER) {
-                        // reasonToJump = `Current time is ahead of end (${buffered}) for ${time} ms.`;
                         hasReasonToJump = true;
                     }
                 }
             } else {
                 this.aheadOfBufferSince = -1;
             }
-            if (this.currentTimeNotChangedSince !== -1) {
-                const time = now - this.currentTimeNotChangedSince;
-                if (time > this.MAX_TIME_TO_RECOVER) {
-                    // reasonToJump = `Current time not changed for ${time} ms.`;
-                    hasReasonToJump = true;
-                }
-            }
+
             if (!hasReasonToJump) {
                 return;
             }
-            let waitingForSeekEnd = 0;
+
+            // Jangan seek lagi kalau masih dalam proses seeking
             if (this.seekingSince !== -1) {
-                waitingForSeekEnd = now - this.seekingSince;
+                const waitingForSeekEnd = now - this.seekingSince;
                 if (waitingForSeekEnd < 1500) {
                     return;
                 }
             }
-            // console.info(`${reasonToJump} Jumping to the end. ${waitingForSeekEnd}`);
 
             const onSeekEnd = () => {
                 this.seekingSince = -1;
                 this.tag.removeEventListener('seeked', onSeekEnd);
                 this.tag.play();
             };
-            if (this.seekingSince !== -1) {
-                console.warn(`[${this.name}]`, `Attempt to seek while already seeking! ${waitingForSeekEnd}`);
-            }
             this.seekingSince = now;
             this.tag.addEventListener('seeked', onSeekEnd);
+            // Jump ke ujung buffer = frame terbaru
             this.tag.currentTime = this.tag.buffered.end(0);
         }
     }

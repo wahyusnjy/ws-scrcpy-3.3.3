@@ -252,7 +252,13 @@ export class StreamClientScrcpy
                 min = StreamClientScrcpy.createVideoSettingsWithBounds(min, minBounds);
             }
         }
+        // Kirim settings ke device saat:
+        // 1. !this.joinedStream → client pertama kali join (force I-frame baru agar langsung render)
+        // 2. !min.equals(videoSettings) → settings berbeda dari yang sedang berjalan
+        // Mengirim SET_VIDEO_SETTINGS ke device akan menyebabkan encoder restart dan
+        // emit I-frame segera, sehingga client baru tidak perlu tunggu iFrameInterval berikutnya.
         if (!min.equals(videoSettings) || !this.joinedStream) {
+            console.log(TAG, `Sending video settings to device (joinedStream=${this.joinedStream}, settingsMatch=${min.equals(videoSettings)})`);
             this.joinedStream = true;
             this.sendMessage(CommandControlMessage.createSetVideoSettingsCommand(min));
         }
