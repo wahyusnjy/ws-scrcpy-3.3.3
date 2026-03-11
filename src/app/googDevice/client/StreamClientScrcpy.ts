@@ -224,8 +224,13 @@ export class StreamClientScrcpy
             }
         }
         if (!videoSettings || !screenInfo) {
-            this.joinedStream = true;
-            this.sendMessage(CommandControlMessage.createSetVideoSettingsCommand(currentSettings));
+            // Server belum mulai encode (fresh start) → perlu kirim settings untuk start encoder
+            // Ini path pertama kali client join stream yang belum ada session sebelumnya
+            if (!this.joinedStream) {
+                this.joinedStream = true;
+                console.log(TAG, 'Fresh stream: sending settings to start encoder');
+                this.sendMessage(CommandControlMessage.createSetVideoSettingsCommand(currentSettings));
+            }
             return;
         }
 
@@ -252,15 +257,22 @@ export class StreamClientScrcpy
                 min = StreamClientScrcpy.createVideoSettingsWithBounds(min, minBounds);
             }
         }
-        // Kirim settings ke device saat:
-        // 1. !this.joinedStream → client pertama kali join (force I-frame baru agar langsung render)
-        // 2. !min.equals(videoSettings) → settings berbeda dari yang sedang berjalan
-        // Mengirim SET_VIDEO_SETTINGS ke device akan menyebabkan encoder restart dan
-        // emit I-frame segera, sehingga client baru tidak perlu tunggu iFrameInterval berikutnya.
-        if (!min.equals(videoSettings) || !this.joinedStream) {
-            console.log(TAG, `Sending video settings to device (joinedStream=${this.joinedStream}, settingsMatch=${min.equals(videoSettings)})`);
+        // STRATEGI BARU (fix 10-detik delay):
+        // - Jika settings BERBEDA → restart encoder (tidak bisa dihindari, ~1-3s)
+        // - Jika settings SAMA   → JANGAN restart! Cukup tunggu I-frame natural berikutnya
+        //   Dengan iFrameInterval=1, max tunggu = 1 detik
+        //   Encoder restart = 1-3 detik → nunggu natural LEBIH CEPAT!
+        // - Restart encoder hanya kalau memang perlu (settings differ)
+        const settingsDiffer = !min.equals(videoSettings);
+        if (settingsDiffer) {
+            // Settings berbeda → harus restart encoder untuk pakai settings baru
+            console.log(TAG, `Settings differ → restarting encoder (new: ${min.bitrate}bps, current: ${videoSettings.bitrate}bps)`);
             this.joinedStream = true;
             this.sendMessage(CommandControlMessage.createSetVideoSettingsCommand(min));
+        } else {
+            // Settings sama → jangan restart, tunggu I-frame natural berikutnya (max 1s)
+            console.log(TAG, `Settings match → waiting for natural I-frame (iFrameInterval=1s, no encoder restart)`);
+            this.joinedStream = true;
         }
     };
 
@@ -270,6 +282,9 @@ export class StreamClientScrcpy
         this.streamReceiver.off('clientsStats', this.onClientsStats);
         this.streamReceiver.off('displayInfo', this.onDisplayInfo);
         this.streamReceiver.off('disconnected', this.onDisconnected);
+
+        // Reset flag agar reconnect berikutnya bisa join fresh
+        this.joinedStream = false;
 
         this.filePushHandler?.release();
         this.filePushHandler = undefined;

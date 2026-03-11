@@ -28,12 +28,15 @@ export class MsePlayer extends BasePlayer {
     //     sendFrameMeta: false,
     // });
     public static readonly preferredVideoSettings: VideoSettings = new VideoSettings({
-        bitrate: 4000000,      // 4 Mbps - balance antara kualitas & memory
-        maxFps: 30,            // 30 fps - smooth & hemat resource
+        bitrate: 2000000,      // 2 Mbps — cukup untuk 320px, hemat bandwidth multistream
+        maxFps: 30,            // 30 fps — smooth & hemat resource
         bounds: new Size(320, 720),
         lockedVideoOrientation: -1,
         sendFrameMeta: false,
-        iFrameInterval: 2,     // ← Ubah dari 10 ke 2: I-frame setiap 2 detik = startup lebih cepat!
+        // iFrameInterval HARUS integer >= 1 (Int8 protocol)
+        // Dikirim ke server via SET_VIDEO_SETTINGS untuk override default scrcpy (10 detik)
+        // Server baru juga request keyframe otomatis saat client connect (200ms delay)
+        iFrameInterval: 1,
     });
     private static DEFAULT_FRAMES_PER_FRAGMENT = 1;
     private static DEFAULT_FRAMES_PER_SECOND = 60;
@@ -72,13 +75,42 @@ export class MsePlayer extends BasePlayer {
     protected readonly isSafari = !!(window as unknown as any)['safari'];
     protected readonly isChrome = navigator.userAgent.includes('Chrome');
     protected readonly isMac = navigator.platform.startsWith('Mac');
-    private MAX_TIME_TO_RECOVER = 300; // ms
-    // MAX_BUFFER=0 → tidak pakai buffer, selalu jump ke frame terbaru
-    private MAX_BUFFER = 0;
-    private MAX_AHEAD = -0.2;
+    private MAX_TIME_TO_RECOVER = 500; // ms - waktu sebelum trigger seek ketika decoder stuck
+    // MAX_BUFFER: seberapa jauh video boleh tertinggal sebelum jump ke frame terbaru
+    // 2.0 = boleh tertinggal 2 detik (cukup toleran, tidak ada seek setiap I-frame)
+    // JANGAN set < 1.0: dengan iFrameInterval=1, seek akan terjadi setiap detik = freeze berulang!
+    private MAX_BUFFER = 2.0;
+    private MAX_AHEAD = -1.0;
 
     public static isSupported(): boolean {
         return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(mimeType);
+    }
+
+    // Hapus localStorage settings yang punya iFrameInterval invalid
+    // (misal dari bug iFrameInterval:0.1 yang disimpan sebagai 0 atau 0.1)
+    private static cleanInvalidStoredSettings(): void {
+        if (!window.localStorage) return;
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < window.localStorage.length; i++) {
+            const key = window.localStorage.key(i);
+            if (key && key.startsWith(MsePlayer.storageKeyPrefix)) {
+                try {
+                    const val = window.localStorage.getItem(key);
+                    if (val) {
+                        const parsed = JSON.parse(val);
+                        if (parsed && (parsed.iFrameInterval < 1 || parsed.iFrameInterval === 0)) {
+                            keysToRemove.push(key);
+                        }
+                    }
+                } catch {
+                    // ignore parse errors
+                }
+            }
+        }
+        keysToRemove.forEach((key) => {
+            console.warn(`[MsePlayer] Clearing invalid stored settings: ${key}`);
+            window.localStorage.removeItem(key);
+        });
     }
 
     constructor(
@@ -94,9 +126,23 @@ export class MsePlayer extends BasePlayer {
         };
         tag.addEventListener('error', this.onVideoError);
         tag.addEventListener('canplay', this.onVideoCanPlay);
+        // Fix: resume playback saat tab/window menjadi visible kembali
+        document.addEventListener('visibilitychange', this.onVisibilityChange);
+        // Option D: clear memory saat halaman di-refresh/close
+        window.addEventListener('beforeunload', this.handleBeforeUnload);
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         setLogger(() => { }, console.error);
+
+        // Bersihkan localStorage dari settings invalid (misal: iFrameInterval=0 dari bug 0.1)
+        // Settings dengan iFrameInterval<1 akan menyebabkan scrcpy pakai default 10 detik!
+        MsePlayer.cleanInvalidStoredSettings();
     }
+
+    handleBeforeUnload = (): void => {
+        // Paksa release MediaSource & SourceBuffer saat refresh/close tab
+        // mencegah orphaned MediaSource & memory leak di browser
+        this.stopConverter();
+    };
 
     onVideoError = (event: Event): void => {
         console.error(`[${this.name}]`, event);
@@ -104,6 +150,17 @@ export class MsePlayer extends BasePlayer {
 
     onVideoCanPlay = (): void => {
         this.onCanPlayHandler();
+    };
+
+    onVisibilityChange = (): void => {
+        // Saat tab kembali aktif (visible), langsung resume video
+        if (document.visibilityState === 'visible' && this.converter) {
+            if (this.tag.paused) {
+                this.tag.play().catch(() => {
+                    // Akan dicoba lagi oleh checkForBadState
+                });
+            }
+        }
     };
 
     // Override: MsePlayer doesn't need screen info before starting playback
@@ -148,8 +205,26 @@ export class MsePlayer extends BasePlayer {
 
     protected onCanPlayHandler(): void {
         this.canPlay = true;
-        this.tag.play();
-        this.tag.removeEventListener('canplay', this.onVideoCanPlay);
+        // Gunakan Promise untuk handle autoplay policy dengan benar
+        const playPromise = this.tag.play();
+        if (playPromise !== undefined) {
+            playPromise
+                .then(() => {
+                    // Berhasil play - hapus listener canplay
+                    this.tag.removeEventListener('canplay', this.onVideoCanPlay);
+                })
+                .catch((err) => {
+                    // Autoplay diblock browser - tambahkan listener click sebagai fallback
+                    console.warn(`[${this.name}] Autoplay blocked:`, err.message);
+                    const resumeOnClick = () => {
+                        this.tag.play().catch(() => { });
+                        document.removeEventListener('click', resumeOnClick);
+                    };
+                    document.addEventListener('click', resumeOnClick, { once: true });
+                });
+        } else {
+            this.tag.removeEventListener('canplay', this.onVideoCanPlay);
+        }
 
         // Auto-create screenInfo dengan ukuran fixed 320x720
         setTimeout(() => {
@@ -250,11 +325,30 @@ export class MsePlayer extends BasePlayer {
             if (this.videoSettings) {
                 fps = this.videoSettings.maxFps;
             }
+            // Option B: Reset state internal sebelum buat converter baru
+            // Pastikan tidak ada frame/block lama yang antri dari session sebelumnya
+            // sehingga stream baru selalu dimulai dalam kondisi bersih
+            this.blocks = [];
+            this.frames = [];
+            this.waitUntilSegmentRemoved = false;
+            this.jumpEnd = -1;
+            this.seekingSince = -1;
+            this.noDecodedFramesSince = -1;
+            this.aheadOfBufferSince = -1;
+            this.bigBufferSince = -1;
             this.converter = MsePlayer.createConverter(this.tag, fps, this.fpf);
             this.canPlay = false;
             this.resetStats();
         }
         this.converter.play();
+        // Fix autoplay policy: coba play video tag segera
+        // Browser bisa reject jika tidak ada interaksi user, tapi ini OK karena
+        // onCanPlayHandler() akan handle saat video siap
+        if (this.tag.paused && this.tag.readyState >= 2) {
+            this.tag.play().catch(() => {
+                // Diabaikan: akan coba lagi via onCanPlayHandler
+            });
+        }
     }
 
     public pause(): void {
@@ -302,24 +396,22 @@ export class MsePlayer extends BasePlayer {
         if (this.sourceBuffer.updating) {
             return;
         }
-        if (this.blocks.length < 10) {
+        if (this.blocks.length < 5) {
             return;
         }
         try {
             this.sourceBuffer.removeEventListener('updateend', this.cleanSourceBuffer);
             this.waitUntilSegmentRemoved = false;
             const removeStart = this.blocks[0].start;
-            const removeEnd = this.blocks[4].end;
-            this.blocks = this.blocks.slice(5);
+            const removeEnd = this.blocks[2].end;
+            this.blocks = this.blocks.slice(3);
             this.sourceBuffer.remove(removeStart, removeEnd);
-            let frame = this.frames.shift();
-            while (frame) {
-                if (!this.checkForIFrame(frame)) {
-                    this.frames.unshift(frame);
-                    break;
-                }
-                frame = this.frames.shift();
-            }
+
+            // PENTING: Jangan replay frames basi dari this.frames!
+            // Frame-frame yang terkumpul selama waitUntilSegmentRemoved sudah stale
+            // (bisa 200-500ms tertinggal). Buang saja, biarkan stream live langsung masuk.
+            // Browser akan langsung render frame baru yang datang setelah ini.
+            this.frames = [];
         } catch (error: any) {
             console.error(`[${this.name}]`, 'Failed to clean source buffer');
         }
@@ -411,7 +503,7 @@ export class MsePlayer extends BasePlayer {
             // Jangan seek lagi kalau masih dalam proses seeking
             if (this.seekingSince !== -1) {
                 const waitingForSeekEnd = now - this.seekingSince;
-                if (waitingForSeekEnd < 1500) {
+                if (waitingForSeekEnd < 800) {
                     return;
                 }
             }
@@ -446,7 +538,9 @@ export class MsePlayer extends BasePlayer {
                     end,
                 };
                 this.blocks.push(block);
-                if (this.blocks.length > 10) {
+                // Option D: threshold >10 → >5 → cleanup lebih cepat dimulai
+                // Kurangi waktu waitUntilSegmentRemoved aktif (frame drop lebih sedikit)
+                if (this.blocks.length > 5) {
                     this.waitUntilSegmentRemoved = true;
 
                     this.sourceBuffer.addEventListener('updateend', this.cleanSourceBuffer);
@@ -472,6 +566,13 @@ export class MsePlayer extends BasePlayer {
             this.converter.pause();
             delete this.converter;
         }
+        // Cleanup: reset buffer state
+        this.blocks = [];
+        this.frames = [];
+        this.waitUntilSegmentRemoved = false;
+        // Cleanup event listeners
+        document.removeEventListener('visibilitychange', this.onVisibilityChange);
+        window.removeEventListener('beforeunload', this.handleBeforeUnload);
     }
 
     public getFitToScreenStatus(): boolean {

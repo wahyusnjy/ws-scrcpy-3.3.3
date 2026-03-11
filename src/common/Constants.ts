@@ -15,7 +15,40 @@ SCRCPY_LISTENS_ON_ALL_INTERFACES = true;
 SCRCPY_LISTENS_ON_ALL_INTERFACES = false;
 /// #endif
 
-const ARGUMENTS = [SERVER_VERSION, SERVER_TYPE, LOG_LEVEL, SERVER_PORT, SCRCPY_LISTENS_ON_ALL_INTERFACES, 'h264', 'true', 'true']; // UHID keyboard, inject mouse (shows cursor)
+// ============================================================
+// SCRCPY SERVER LAUNCH ARGUMENTS (CONFIRMED FORMAT v3.3.3)
+// adb shell CLASSPATH=... app_process / com.genymobile.scrcpy.Server \
+//   3.3.3 web DEBUG 8886 true h264 false true 4000000
+// ============================================================
+//
+// Server baru sudah include fixes:
+// 1. NAL-aware streaming (1 WebSocket msg = 1 NAL unit)
+// 2. SPS/PPS cache: dikirim ke client baru langsung saat connect
+// 3. 200ms delay sebelum keyframe request (decoder sempat init)
+//
+// Argumen positional:
+// [0] version, [1] type, [2] log_level, [3] port,
+// [4] listen_on_all_interfaces, [5] codec, [6] uhid_keyboard,
+// [7] inject_mouse, [8] bitrate (NEW in updated server!)
+//
+// Note: iFrameInterval default di scrcpy = 10 detik!
+// Diatasi via SET_VIDEO_SETTINGS command setelah client connect
+// (lihat MsePlayer.preferredVideoSettings.iFrameInterval = 1)
+
+const INITIAL_BITRATE = 4000000; // 4 Mbps initial (client bisa negotiate lebih rendah via SET_VIDEO_SETTINGS)
+
+const ARGUMENTS = [
+    SERVER_VERSION,                    // 3.3.3
+    SERVER_TYPE,                       // web
+    LOG_LEVEL,                         // DEBUG
+    SERVER_PORT,                       // 8886
+    SCRCPY_LISTENS_ON_ALL_INTERFACES,  // true/false (dikontrol build flag)
+    'h264',                            // video codec
+    'true',                           // UHID keyboard (false = gunakan inject keycode biasa)
+    'false',                            // inject mouse (shows cursor on screen)
+    INITIAL_BITRATE,                   // 4000000 = 4 Mbps (confirmed supported di server baru)
+];
+
 
 export const SERVER_PROCESS_NAME = 'app_process';
 

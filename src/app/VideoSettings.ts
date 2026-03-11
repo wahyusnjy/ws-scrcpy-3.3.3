@@ -34,7 +34,9 @@ export default class VideoSettings {
             this.bitrate = data.bitrate;
             this.bounds = data.bounds;
             this.maxFps = data.maxFps;
-            this.iFrameInterval = data.iFrameInterval;
+            // iFrameInterval HARUS integer >= 1: ditulis sebagai Int8 ke scrcpy protocol
+            // Nilai float (0.1) → Int8 → 0 → scrcpy pakai default 10 detik!
+            this.iFrameInterval = Math.max(1, Math.round(data.iFrameInterval));
             this.sendFrameMeta = data.sendFrameMeta || false;
             this.lockedVideoOrientation = data.lockedVideoOrientation || -1;
             if (typeof data.displayId === 'number' && !isNaN(data.displayId) && data.displayId >= 0) {
@@ -198,17 +200,7 @@ export default class VideoSettings {
 
     public toString(): string {
         // prettier-ignore
-        return `VideoSettings{bitrate=${
-            this.bitrate}, maxFps=${
-            this.maxFps}, iFrameInterval=${
-            this.iFrameInterval}, bounds=${
-            this.bounds}, crop=${
-            this.crop}, metaFrame=${
-            this.sendFrameMeta}, lockedVideoOrientation=${
-            this.lockedVideoOrientation}, displayId=${
-            this.displayId}, codecOptions=${
-            this.codecOptions}, encoderName=${
-            this.encoderName}}`;
+        return `VideoSettings{bitrate=${this.bitrate}, maxFps=${this.maxFps}, iFrameInterval=${this.iFrameInterval}, bounds=${this.bounds}, crop=${this.crop}, metaFrame=${this.sendFrameMeta}, lockedVideoOrientation=${this.lockedVideoOrientation}, displayId=${this.displayId}, codecOptions=${this.codecOptions}, encoderName=${this.encoderName}}`;
     }
 
     public toJSON(): Settings {
