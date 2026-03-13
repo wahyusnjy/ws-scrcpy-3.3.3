@@ -5,6 +5,7 @@ import VideoSettings from '../VideoSettings';
 import ScreenInfo from '../ScreenInfo';
 import Util from '../Util';
 import { DisplayInfo } from '../DisplayInfo';
+import Size from '../Size';
 import { ParamsStream } from '../../types/ParamsStream';
 
 const DEVICE_NAME_FIELD_LENGTH = 64;
@@ -130,6 +131,34 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
     }
 
     protected onSocketMessage(event: MessageEvent): void {
+        // Handle TEXT messages — our WebSocket server sends JSON deviceInfo as text
+        if (typeof event.data === 'string') {
+            try {
+                const json = JSON.parse(event.data);
+                if (json && json.type === 'deviceInfo') {
+                    // Server sent device info — synthesize the displayInfo event so
+                    // StreamClientScrcpy.onDisplayInfo() is called and video can start.
+                    const deviceName = `${json.device?.manufacturer || ''} ${json.device?.model || ''}`.trim() || 'Android';
+                    this.deviceName = deviceName;
+                    this.clientId = 0;
+                    this.hasInitialInfo = true;
+
+                    // Build a synthetic DisplayInfo for display 0
+                    // We don't have real dimensions yet; StreamClientScrcpy will use
+                    // preferredVideoSettings (320x720) which is fine.
+                    const syntheticDisplayInfo = new DisplayInfo(0, new Size(1080, 1920), 0, 0, 0);
+                    this.displayInfoMap.set(0, syntheticDisplayInfo);
+                    this.connectionCountMap.set(0, 0);
+
+                    this.triggerInitialInfoEvents();
+                    console.log('[StreamReceiver] Got deviceInfo JSON → emitted synthetic displayInfo. Video should start.');
+                }
+            } catch {
+                // Not JSON, ignore
+            }
+            return;
+        }
+
         if (event.data instanceof ArrayBuffer) {
             // works only because MAGIC_BYTES_INITIAL and MAGIC_BYTES_MESSAGE have same length
             if (event.data.byteLength > MAGIC_BYTES_INITIAL.length) {

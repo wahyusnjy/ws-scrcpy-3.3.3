@@ -6,7 +6,7 @@ export const SERVER_VERSION = '3.3.3';
 
 export const SERVER_TYPE = 'web';
 
-export const LOG_LEVEL = 'DEBUG'; // Enable debug logging for troubleshooting
+export const LOG_LEVEL = 'INFO'; // DEBUG only when troubleshooting — causes heavy logcat I/O
 
 let SCRCPY_LISTENS_ON_ALL_INTERFACES;
 /// #if SCRCPY_LISTENS_ON_ALL_INTERFACES
@@ -44,9 +44,9 @@ const ARGUMENTS = [
     SERVER_PORT,                       // 8886
     SCRCPY_LISTENS_ON_ALL_INTERFACES,  // true/false (dikontrol build flag)
     'h264',                            // video codec
-    'true',                           // UHID keyboard (false = gunakan inject keycode biasa)
-    'false',                            // inject mouse (shows cursor on screen)
-    INITIAL_BITRATE,                   // 4000000 = 4 Mbps (confirmed supported di server baru)
+    'true',                            // inject mouse (shows cursor on screen)
+    'true',                            // UHID keyboard (false = gunakan inject keycode biasa)
+    // INITIAL_BITRATE,                   // 4000000 = 4 Mbps (confirmed supported di server baru)
 ];
 
 
