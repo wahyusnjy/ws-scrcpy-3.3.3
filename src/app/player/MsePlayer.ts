@@ -19,23 +19,12 @@ export class MsePlayer extends BasePlayer {
     public static readonly storageKeyPrefix = 'MseDecoder';
     public static readonly playerFullName = 'H264 Converter';
     public static readonly playerCodeName = 'mse';
-    // public static readonly preferredVideoSettings: VideoSettings = new VideoSettings({
-    //     lockedVideoOrientation: -1,
-    //     bitrate: 7340032,
-    //     maxFps: 60,
-    //     iFrameInterval: 10,
-    //     bounds: new Size(320, 720),
-    //     sendFrameMeta: false,
-    // });
     public static readonly preferredVideoSettings: VideoSettings = new VideoSettings({
         bitrate: 2000000,      // 2 Mbps — cukup untuk 320px, hemat bandwidth multistream
         maxFps: 30,            // 30 fps — smooth & hemat resource
         bounds: new Size(320, 720),
         lockedVideoOrientation: -1,
-        sendFrameMeta: false,
-        // iFrameInterval HARUS integer >= 1 (Int8 protocol)
-        // Dikirim ke server via SET_VIDEO_SETTINGS untuk override default scrcpy (10 detik)
-        // Server baru juga request keyframe otomatis saat client connect (200ms delay)
+        sendFrameMeta: true,
         iFrameInterval: 1,
     });
     private static DEFAULT_FRAMES_PER_FRAGMENT = 1;
@@ -76,10 +65,7 @@ export class MsePlayer extends BasePlayer {
     protected readonly isChrome = navigator.userAgent.includes('Chrome');
     protected readonly isMac = navigator.platform.startsWith('Mac');
     private MAX_TIME_TO_RECOVER = 500; // ms - waktu sebelum trigger seek ketika decoder stuck
-    // MAX_BUFFER: seberapa jauh video boleh tertinggal sebelum jump ke frame terbaru
-    // 2.0 = boleh tertinggal 2 detik (cukup toleran, tidak ada seek setiap I-frame)
-    // JANGAN set < 1.0: dengan iFrameInterval=1, seek akan terjadi setiap detik = freeze berulang!
-    private MAX_BUFFER = 2.0;
+    private MAX_BUFFER = 0.5;
     private MAX_AHEAD = -1.0;
 
     public static isSupported(): boolean {
