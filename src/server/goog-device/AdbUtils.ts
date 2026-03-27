@@ -26,6 +26,13 @@ const fakeHost = '127.0.0.1:6666';
 const fakeHostRe = /127\.0\.0\.1:6666/;
 
 export class AdbUtils {
+    /**
+     * Cache: serial+remote → port yang sudah di-forward.
+     * Key format: "<serial>|<remote>" → port number.
+     * Mencegah listForwards() ke ADB daemon setiap kali browser refresh.
+     * Waktu lookup: O(1) dari memori vs ~200–800ms via ADB.
+     */
+    private static forwardCache = new Map<string, number>();
     private static async formatStatsMin(entry: Entry): Promise<FileStats> {
         return {
             name: entry.name,
@@ -138,19 +145,62 @@ export class AdbUtils {
     }
 
     public static async forward(serial: string, remote: string): Promise<number> {
+        const cacheKey = `${serial}|${remote}`;
+
+        // 1. Cek cache in-memory dulu — O(1), tidak butuh ADB call sama sekali
+        if (this.forwardCache.has(cacheKey)) {
+            const cachedPort = this.forwardCache.get(cacheKey)!;
+            console.log(`[AdbUtils] forward cache HIT: ${serial} → port ${cachedPort} (instan)`);
+            return cachedPort;
+        }
+
+        console.log(`[AdbUtils] forward cache MISS: ${serial}, checking ADB forwards...`);
+
+        // 2. Cache miss: cek apakah ADB sudah punya forward aktif (eg. server restart)
         const client = AdbExtended.createClient();
         const forwards = await client.listForwards(serial);
-        const forward = forwards.find((item: Forward) => {
+        const existing = forwards.find((item: Forward) => {
             return item.remote === remote && item.local.startsWith('tcp:') && item.serial === serial;
         });
-        if (forward) {
-            const { local } = forward;
-            return parseInt(local.split('tcp:')[1], 10);
+        if (existing) {
+            const port = parseInt(existing.local.split('tcp:')[1], 10);
+            console.log(`[AdbUtils] Reusing existing ADB forward: ${serial} → port ${port}`);
+            // Simpan ke cache agar request berikutnya instan
+            this.forwardCache.set(cacheKey, port);
+            return port;
         }
+
+        // 3. Belum ada forward sama sekali: buat baru
         const port = await portfinder.getPortPromise();
         const local = `tcp:${port}`;
         await client.forward(serial, local, remote);
+        console.log(`[AdbUtils] Created new ADB forward: ${serial} ${local} → ${remote} (port ${port})`);
+
+        // 4. Simpan ke cache
+        this.forwardCache.set(cacheKey, port);
         return port;
+    }
+
+    /**
+     * Hapus cache forward untuk device tertentu.
+     * Panggil ini HANYA saat device benar-benar disconnect dari ADB
+     * (bukan saat browser tab ditutup/refresh).
+     * Dengan membiarkan cache hidup, refresh browser akan instan.
+     */
+    public static clearForward(serial: string, remote?: string): void {
+        if (remote) {
+            const cacheKey = `${serial}|${remote}`;
+            this.forwardCache.delete(cacheKey);
+            console.log(`[AdbUtils] Cleared forward cache: ${serial}|${remote}`);
+        } else {
+            // Hapus semua entry untuk serial ini
+            for (const key of this.forwardCache.keys()) {
+                if (key.startsWith(`${serial}|`)) {
+                    this.forwardCache.delete(key);
+                }
+            }
+            console.log(`[AdbUtils] Cleared all forward cache for: ${serial}`);
+        }
     }
 
     public static async getDevtoolsRemoteList(serial: string): Promise<string[]> {

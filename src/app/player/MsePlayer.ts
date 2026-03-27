@@ -26,6 +26,12 @@ export class MsePlayer extends BasePlayer {
         lockedVideoOrientation: -1,
         sendFrameMeta: true,
         iFrameInterval: 1,
+        // intra-refresh-mode=1: encoder menyebarkan keyframe data secara rolling setiap frame
+        // (bukan I-Frame besar sekali per detik). Efek: semua device bisa render hampir bersamaan
+        // setelah join, tanpa perlu nunggu "giliran" I-Frame yang timing-nya berbeda tiap device.
+        // CATATAN: Tidak semua encoder Android mendukung ini (Qualcomm biasanya support,
+        // Exynos/MediaTek bervariasi). Kalau ada artefak visual, hapus baris codecOptions ini.
+        codecOptions: 'intra-refresh-mode=1',
     });
     private static DEFAULT_FRAMES_PER_FRAGMENT = 1;
     private static DEFAULT_FRAMES_PER_SECOND = 60;
@@ -72,10 +78,12 @@ export class MsePlayer extends BasePlayer {
         return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(mimeType);
     }
 
-    // Hapus localStorage settings yang punya iFrameInterval invalid
-    // (misal dari bug iFrameInterval:0.1 yang disimpan sebagai 0 atau 0.1)
+    // Hapus localStorage settings yang invalid atau tidak kompatibel:
+    // 1. iFrameInterval < 1 → scrcpy pakai default 10 detik!
+    // 2. codecOptions tidak sama dengan preferredVideoSettings → akan trigger encoder restart
     private static cleanInvalidStoredSettings(): void {
         if (!window.localStorage) return;
+        const expectedCodecOptions = MsePlayer.preferredVideoSettings.codecOptions;
         const keysToRemove: string[] = [];
         for (let i = 0; i < window.localStorage.length; i++) {
             const key = window.localStorage.key(i);
@@ -84,7 +92,15 @@ export class MsePlayer extends BasePlayer {
                     const val = window.localStorage.getItem(key);
                     if (val) {
                         const parsed = JSON.parse(val);
-                        if (parsed && (parsed.iFrameInterval < 1 || parsed.iFrameInterval === 0)) {
+                        if (!parsed) continue;
+                        // Kondisi 1: iFrameInterval tidak valid
+                        if (parsed.iFrameInterval < 1 || parsed.iFrameInterval === 0) {
+                            keysToRemove.push(key);
+                            continue;
+                        }
+                        // Kondisi 2: codecOptions berbeda dari preferred (misal: settings lama
+                        // tidak punya intra-refresh-mode=1, akan menyebabkan encoder restart)
+                        if (parsed.codecOptions !== expectedCodecOptions) {
                             keysToRemove.push(key);
                         }
                     }

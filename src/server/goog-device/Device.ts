@@ -7,6 +7,7 @@ import { TypedEmitter } from '../../common/TypedEmitter';
 import GoogDeviceDescriptor from '../../types/GoogDeviceDescriptor';
 import { ScrcpyServer } from './ScrcpyServer';
 import { Properties } from './Properties';
+import { AdbUtils } from './AdbUtils';
 import Timeout = NodeJS.Timeout;
 
 enum PID_DETECTION {
@@ -63,6 +64,10 @@ export class Device extends TypedEmitter<DeviceEvents> {
             this.properties = undefined;
         } else {
             this.connected = false;
+            // Bersihkan cache port forward saat device benar-benar disconnect dari ADB.
+            // Ini mencegah port lama dipakai ulang oleh device yang sudah tidak terhubung.
+            // Saat device reconnect, cache akan diisi ulang secara otomatis.
+            AdbUtils.clearForward(this.udid);
         }
         this.descriptor.state = state;
         this.emitUpdate();
