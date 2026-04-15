@@ -45,7 +45,8 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
     private readonly screenInfoMap: Map<number, ScreenInfo> = new Map();
     private readonly videoSettingsMap: Map<number, VideoSettings> = new Map();
     private hasInitialInfo = false;
-    private cachedConfigFrames: ArrayBuffer[] = [];  // ✅ cache ALL config frames (SPS + PPS)
+    // cachedConfigFrames DIHAPUS: custom WSServer.java sudah handle server-side
+    // via sendCodecMetadataToClient() + WS-KeyframeRetry thread
 
     constructor(params: P) {
         super(params);
@@ -175,21 +176,10 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
                 }
             }
             const data = event.data as ArrayBuffer;
-            const view = new DataView(data);
 
-            // Cek apakah ini config frame (pts flags bit 63 set = PACKET_FLAG_CONFIG)
-            // Format: 8 byte pts+flags, 4 byte size, lalu data
-            if (data.byteLength > 12) {
-                const ptsHigh = view.getUint32(0, false); // big-endian, upper 32 bit
-                const isConfig = (ptsHigh & 0x80000000) !== 0;
-
-                if (isConfig) {
-                    // ✅ Simpan semua config frames (SPS, PPS, VPS)
-                    this.cachedConfigFrames.push(data.slice(0));
-                    console.log(TAG, `Cached config frame #${this.cachedConfigFrames.length}, size:`, data.byteLength);
-                }
-            }
-
+            // Custom WSServer.java mengirim raw NAL units (Annex B, dengan start code).
+            // TIDAK ada pts/size metadata wrapper (sendFrameMeta tidak diimplementasikan
+            // di server kami). Langsung emit sebagai video frame.
             this.emit('video', new Uint8Array(data));
 
         }
@@ -198,14 +188,12 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
     protected onSocketOpen(): void {
         this.emit('connected', void 0);
 
-        // ✅ Replay semua cached config frames (SPS, PPS) ke player sebelum data live
-        // Tanpa ini decoder tidak bisa init dan screen tetap hitam
-        if (this.cachedConfigFrames.length > 0) {
-            console.log(TAG, `Reconnected: replaying ${this.cachedConfigFrames.length} cached config frames`);
-            for (const frame of this.cachedConfigFrames) {
-                this.emit('video', new Uint8Array(frame));
-            }
-        }
+        // ⚠️ JANGAN replay cachedConfigFrames di sini!
+        // Custom WSServer.java sudah handle ini server-side via:
+        //   1. sendCodecMetadataToClient() — kirim SPS/PPS cache ke client baru
+        //   2. WS-KeyframeRetry thread — request keyframe 5x setiap 400ms
+        // Replay dari browser-side justru menyebabkan frame dikirim ke converter
+        // SEBELUM sourceBuffer siap → TypeError: Cannot convert undefined or null to object.
         
         let e = this.events.shift();
         while (e) {

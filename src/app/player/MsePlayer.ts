@@ -24,7 +24,8 @@ export class MsePlayer extends BasePlayer {
         maxFps: 30,            // 30 fps — smooth & hemat resource
         bounds: new Size(320, 720),
         lockedVideoOrientation: -1,
-        sendFrameMeta: true,
+        sendFrameMeta: false,  // ⚠️ PENTING: custom WSServer.java kirim raw NAL unit tanpa metadata header
+                               // sendFrameMeta: true akan menyebabkan h264-converter gagal parse NAL
         iFrameInterval: 1,    // IDR setiap 1 detik — cukup cepat untuk reconnect
         // codecOptions DIHAPUS: intra-refresh-mode=1 konflik dengan iFrameInterval=1
         // → IDR proper tidak datang → decoder stuck setelah refresh
@@ -69,6 +70,14 @@ export class MsePlayer extends BasePlayer {
     private MAX_TIME_TO_RECOVER = 500; // ms - waktu sebelum trigger seek ketika decoder stuck
     private MAX_BUFFER = 1.5;  // ↑ dari 0.5 → kurangi seek agresif yang bikin stutter
     private MAX_AHEAD = -1.0;
+
+    // ─── Guard: MediaSource/SourceBuffer init async ───────────────────────────
+    // h264-converter membuka MediaSource secara async. Bila appendRawData() dipanggil
+    // sebelum sourceBuffer siap → Uint8Array.set(null) → TypeError crash.
+    // Solusi: tampung frame di pendingFrames sampai sourceBuffer benar-benar ready.
+    private converterReady = false;
+    private pendingFrames: Uint8Array[] = [];
+    private sourceBufferCheckId?: number; // requestAnimationFrame ID untuk polling
 
     public static isSupported(): boolean {
         return typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported(mimeType);
@@ -323,30 +332,67 @@ export class MsePlayer extends BasePlayer {
             if (this.videoSettings) {
                 fps = this.videoSettings.maxFps;
             }
-            // Option B: Reset state internal sebelum buat converter baru
-            // Pastikan tidak ada frame/block lama yang antri dari session sebelumnya
-            // sehingga stream baru selalu dimulai dalam kondisi bersih
+            // Reset state internal sebelum buat converter baru ─ pastikan tidak ada
+            // frame/block lama yang antri dari session sebelumnya
             this.blocks = [];
             this.frames = [];
+            this.pendingFrames = [];
             this.waitUntilSegmentRemoved = false;
             this.jumpEnd = -1;
             this.seekingSince = -1;
             this.noDecodedFramesSince = -1;
             this.aheadOfBufferSince = -1;
             this.bigBufferSince = -1;
+            this.converterReady = false; // reset: sourceBuffer belum siap
             this.converter = MsePlayer.createConverter(this.tag, fps, this.fpf);
             this.canPlay = false;
             this.resetStats();
+
+            // Mulai polling sourceBuffer — flush pendingFrames begitu siap
+            this.pollSourceBufferReady();
         }
         this.converter.play();
         // Fix autoplay policy: coba play video tag segera
-        // Browser bisa reject jika tidak ada interaksi user, tapi ini OK karena
-        // onCanPlayHandler() akan handle saat video siap
         if (this.tag.paused && this.tag.readyState >= 2) {
             this.tag.play().catch(() => {
                 // Diabaikan: akan coba lagi via onCanPlayHandler
             });
         }
+    }
+
+    /**
+     * Poll sampai converter.sourceBuffer siap (MediaSource async init).
+     * Begitu ready, flush semua frame yang ditahan di pendingFrames.
+     * Ini mencegah TypeError: "Cannot convert undefined or null to object"
+     * di Uint8Array.set() dalam h264-converter box().
+     */
+    private pollSourceBufferReady(): void {
+        if (this.sourceBufferCheckId !== undefined) {
+            cancelAnimationFrame(this.sourceBufferCheckId);
+        }
+        const check = () => {
+            if (!this.converter) {
+                return; // converter dihentikan
+            }
+            const sb = this.converter.sourceBuffer;
+            if (sb) {
+                // SourceBuffer sudah ready!
+                this.converterReady = true;
+                this.sourceBufferCheckId = undefined;
+                // Flush frame-frame yang ditahan
+                const pending = this.pendingFrames.splice(0);
+                if (pending.length > 0) {
+                    console.log(`[MsePlayer] sourceBuffer ready — flushing ${pending.length} pending frames`);
+                    for (const frame of pending) {
+                        this.dispatchFrame(frame);
+                    }
+                }
+            } else {
+                // Belum siap, cek lagi di frame berikutnya
+                this.sourceBufferCheckId = requestAnimationFrame(check);
+            }
+        };
+        this.sourceBufferCheckId = requestAnimationFrame(check);
     }
 
     public pause(): void {
@@ -434,6 +480,19 @@ export class MsePlayer extends BasePlayer {
 
     public pushFrame(frame: Uint8Array): void {
         super.pushFrame(frame);
+
+        // Guard: tahan frame kalau converter belum siap (sourceBuffer masih null)
+        // Ini mencegah TypeError crash di h264-converter box() / Uint8Array.set()
+        if (!this.converterReady) {
+            this.pendingFrames.push(frame);
+            return;
+        }
+
+        this.dispatchFrame(frame);
+    }
+
+    /** Dispatch satu frame ke converter — dipanggil baik langsung maupun dari flush pending. */
+    private dispatchFrame(frame: Uint8Array): void {
         if (!this.checkForIFrame(frame)) {
             this.frames.push(frame);
         } else {
@@ -522,7 +581,15 @@ export class MsePlayer extends BasePlayer {
         if (!this.converter) {
             return false;
         }
-        this.sourceBuffer = this.converter.sourceBuffer;
+
+        // Selalu update sourceBuffer dari converter — tapi jangan lanjut kalau masih null
+        const sb = this.converter.sourceBuffer;
+        if (!sb) {
+            // sourceBuffer belum siap, tinggalkan frame
+            return false;
+        }
+        this.sourceBuffer = sb;
+
         if (BasePlayer.isIFrame(frame)) {
             let start = 0;
             let end = 0;
@@ -536,19 +603,13 @@ export class MsePlayer extends BasePlayer {
                     end,
                 };
                 this.blocks.push(block);
-                // Option D: threshold >10 → >5 → cleanup lebih cepat dimulai
-                // Kurangi waktu waitUntilSegmentRemoved aktif (frame drop lebih sedikit)
                 if (this.blocks.length > 5) {
                     this.waitUntilSegmentRemoved = true;
-
                     this.sourceBuffer.addEventListener('updateend', this.cleanSourceBuffer);
                     this.converter.appendRawData(frame);
                     return true;
                 }
             }
-            // if (this.sourceBuffer) {
-            //     this.sourceBuffer.onupdateend = this.checkVideoResize;
-            // }
         }
         if (this.waitUntilSegmentRemoved) {
             return false;
@@ -559,6 +620,11 @@ export class MsePlayer extends BasePlayer {
     }
 
     private stopConverter(): void {
+        // Cancel sourceBuffer polling jika masih berjalan
+        if (this.sourceBufferCheckId !== undefined) {
+            cancelAnimationFrame(this.sourceBufferCheckId);
+            this.sourceBufferCheckId = undefined;
+        }
         if (this.converter) {
             this.converter.appendRawData(new Uint8Array([]));
             this.converter.pause();
@@ -567,6 +633,8 @@ export class MsePlayer extends BasePlayer {
         // Cleanup: reset buffer state
         this.blocks = [];
         this.frames = [];
+        this.pendingFrames = [];
+        this.converterReady = false;
         this.waitUntilSegmentRemoved = false;
         // Cleanup event listeners
         document.removeEventListener('visibilitychange', this.onVisibilityChange);
