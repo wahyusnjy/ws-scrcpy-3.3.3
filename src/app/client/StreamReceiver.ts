@@ -45,6 +45,7 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
     private readonly screenInfoMap: Map<number, ScreenInfo> = new Map();
     private readonly videoSettingsMap: Map<number, VideoSettings> = new Map();
     private hasInitialInfo = false;
+    private cachedConfigFrames: ArrayBuffer[] = [];  // ✅ cache ALL config frames (SPS + PPS)
 
     constructor(params: P) {
         super(params);
@@ -173,13 +174,39 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
                     return;
                 }
             }
+            const data = event.data as ArrayBuffer;
+            const view = new DataView(data);
 
-            this.emit('video', new Uint8Array(event.data));
+            // Cek apakah ini config frame (pts flags bit 63 set = PACKET_FLAG_CONFIG)
+            // Format: 8 byte pts+flags, 4 byte size, lalu data
+            if (data.byteLength > 12) {
+                const ptsHigh = view.getUint32(0, false); // big-endian, upper 32 bit
+                const isConfig = (ptsHigh & 0x80000000) !== 0;
+
+                if (isConfig) {
+                    // ✅ Simpan semua config frames (SPS, PPS, VPS)
+                    this.cachedConfigFrames.push(data.slice(0));
+                    console.log(TAG, `Cached config frame #${this.cachedConfigFrames.length}, size:`, data.byteLength);
+                }
+            }
+
+            this.emit('video', new Uint8Array(data));
+
         }
     }
 
     protected onSocketOpen(): void {
         this.emit('connected', void 0);
+
+        // ✅ Replay semua cached config frames (SPS, PPS) ke player sebelum data live
+        // Tanpa ini decoder tidak bisa init dan screen tetap hitam
+        if (this.cachedConfigFrames.length > 0) {
+            console.log(TAG, `Reconnected: replaying ${this.cachedConfigFrames.length} cached config frames`);
+            for (const frame of this.cachedConfigFrames) {
+                this.emit('video', new Uint8Array(frame));
+            }
+        }
+        
         let e = this.events.shift();
         while (e) {
             this.sendEvent(e);

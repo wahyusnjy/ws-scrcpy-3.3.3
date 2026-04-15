@@ -25,13 +25,9 @@ export class MsePlayer extends BasePlayer {
         bounds: new Size(320, 720),
         lockedVideoOrientation: -1,
         sendFrameMeta: true,
-        iFrameInterval: 1,
-        // intra-refresh-mode=1: encoder menyebarkan keyframe data secara rolling setiap frame
-        // (bukan I-Frame besar sekali per detik). Efek: semua device bisa render hampir bersamaan
-        // setelah join, tanpa perlu nunggu "giliran" I-Frame yang timing-nya berbeda tiap device.
-        // CATATAN: Tidak semua encoder Android mendukung ini (Qualcomm biasanya support,
-        // Exynos/MediaTek bervariasi). Kalau ada artefak visual, hapus baris codecOptions ini.
-        codecOptions: 'intra-refresh-mode=1',
+        iFrameInterval: 1,    // IDR setiap 1 detik — cukup cepat untuk reconnect
+        // codecOptions DIHAPUS: intra-refresh-mode=1 konflik dengan iFrameInterval=1
+        // → IDR proper tidak datang → decoder stuck setelah refresh
     });
     private static DEFAULT_FRAMES_PER_FRAGMENT = 1;
     private static DEFAULT_FRAMES_PER_SECOND = 60;
@@ -71,7 +67,7 @@ export class MsePlayer extends BasePlayer {
     protected readonly isChrome = navigator.userAgent.includes('Chrome');
     protected readonly isMac = navigator.platform.startsWith('Mac');
     private MAX_TIME_TO_RECOVER = 500; // ms - waktu sebelum trigger seek ketika decoder stuck
-    private MAX_BUFFER = 0.5;
+    private MAX_BUFFER = 1.5;  // ↑ dari 0.5 → kurangi seek agresif yang bikin stutter
     private MAX_AHEAD = -1.0;
 
     public static isSupported(): boolean {

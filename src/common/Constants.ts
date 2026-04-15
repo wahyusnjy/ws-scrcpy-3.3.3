@@ -46,7 +46,7 @@ const ARGUMENTS = [
     'h264',                            // video codec
     'true',                            // inject mouse (shows cursor on screen)
     'true',                            // UHID keyboard (false = gunakan inject keycode biasa)
-    // INITIAL_BITRATE,                   // 4000000 = 4 Mbps (confirmed supported di server baru)
+    '1000000',// INITIAL_BITRATE,      // 4000000 = 4 Mbps (confirmed supported di server baru)
 ];
 
 
