@@ -19,8 +19,9 @@ LOG_LEVEL="DEBUG"
 SERVER_PORT="8886"
 LISTEN_ALL="false"
 VIDEO_CODEC="h264"
-AUDIO="true"
-VIDEO="true"
+INJECT_MOUSE="true"    # Tambahan baru
+UHID_KEYBOARD="true"   # Tambahan baru
+BITRATE="1000000"      # 1 Mbps sesuai permintaanmu
 
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════════════════${NC}"
@@ -59,7 +60,8 @@ echo -e "${GREEN}📱 Found ${DEVICE_COUNT} device(s)${NC}"
 echo ""
 
 # Build the run command
-RUN_CMD="CLASSPATH=/data/local/tmp/scrcpy-server.jar nohup app_process / com.genymobile.scrcpy.Server $SERVER_VERSION $SERVER_TYPE $LOG_LEVEL $SERVER_PORT $LISTEN_ALL $VIDEO_CODEC $AUDIO $VIDEO"
+# RUN_CMD="CLASSPATH=/data/local/tmp/scrcpy-server.jar nohup app_process / com.genymobile.scrcpy.Server $SERVER_VERSION $SERVER_TYPE $LOG_LEVEL $SERVER_PORT $LISTEN_ALL $VIDEO_CODEC $AUDIO $VIDEO"
+RUN_CMD="CLASSPATH=/data/local/tmp/scrcpy-server.jar nohup app_process / com.genymobile.scrcpy.Server $SERVER_VERSION $SERVER_TYPE $LOG_LEVEL $SERVER_PORT $LISTEN_ALL $VIDEO_CODEC $INJECT_MOUSE $UHID_KEYBOARD $BITRATE"
 
 echo -e "${CYAN}Command: $RUN_CMD${NC}"
 echo ""
