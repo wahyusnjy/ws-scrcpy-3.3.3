@@ -163,12 +163,34 @@ export class MsePlayer extends BasePlayer {
         // Saat tab kembali aktif (visible), langsung resume video
         if (document.visibilityState === 'visible' && this.converter) {
             if (this.tag.paused) {
-                this.tag.play().catch(() => {
-                    // Akan dicoba lagi oleh checkForBadState
-                });
+                this.safePlay();
             }
         }
     };
+
+    /**
+     * Safely call video.play() and suppress AbortError caused by
+     * browser power-saving policy (video-only background media paused).
+     * See: https://goo.gl/LdLk22
+     */
+    private safePlay(): void {
+        const promise = this.tag.play();
+        if (promise !== undefined) {
+            promise.catch((err: DOMException) => {
+                // AbortError = browser paused video to save power (background tab,
+                // out-of-viewport, or video-only media policy). Suppress silently.
+                if (err.name === 'AbortError') {
+                    return;
+                }
+                // NotAllowedError = autoplay blocked by browser policy. Will be
+                // retried when the user interacts with the page.
+                if (err.name === 'NotAllowedError') {
+                    return;
+                }
+                console.warn(`[${this.name}] play() rejected:`, err.message);
+            });
+        }
+    }
 
     // Override: MsePlayer doesn't need screen info before starting playback
     protected needScreenInfoBeforePlay(): boolean {
@@ -354,9 +376,7 @@ export class MsePlayer extends BasePlayer {
         this.converter.play();
         // Fix autoplay policy: coba play video tag segera
         if (this.tag.paused && this.tag.readyState >= 2) {
-            this.tag.play().catch(() => {
-                // Diabaikan: akan coba lagi via onCanPlayHandler
-            });
+            this.safePlay();
         }
     }
 
@@ -568,7 +588,8 @@ export class MsePlayer extends BasePlayer {
             const onSeekEnd = () => {
                 this.seekingSince = -1;
                 this.tag.removeEventListener('seeked', onSeekEnd);
-                this.tag.play();
+                // Use safePlay() to suppress AbortError from browser power-saving policy
+                this.safePlay();
             };
             this.seekingSince = now;
             this.tag.addEventListener('seeked', onSeekEnd);
