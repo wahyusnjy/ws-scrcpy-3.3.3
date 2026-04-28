@@ -29,10 +29,16 @@ export class AdbUtils {
     /**
      * Cache: serial+remote → port yang sudah di-forward.
      * Key format: "<serial>|<remote>" → port number.
-     * Mencegah listForwards() ke ADB daemon setiap kali browser refresh.
-     * Waktu lookup: O(1) dari memori vs ~200–800ms via ADB.
      */
     private static forwardCache = new Map<string, number>();
+
+    /**
+     * Mutex untuk serialisasi alokasi port.
+     * Mencegah race condition saat 25+ device start bersamaan:
+     * portfinder.getPortPromise() tanpa mutex bisa return port yang SAMA
+     * untuk beberapa device, menyebabkan forward saling override.
+     */
+    private static portAllocMutex: Promise<unknown> = Promise.resolve();
     private static async formatStatsMin(entry: Entry): Promise<FileStats> {
         return {
             name: entry.name,
@@ -147,37 +153,56 @@ export class AdbUtils {
     public static async forward(serial: string, remote: string): Promise<number> {
         const cacheKey = `${serial}|${remote}`;
 
-        // 1. Cek cache in-memory dulu — O(1), tidak butuh ADB call sama sekali
+        // 1. Cache hit: validasi dulu bahwa forward masih aktif di ADB
         if (this.forwardCache.has(cacheKey)) {
             const cachedPort = this.forwardCache.get(cacheKey)!;
-            console.log(`[AdbUtils] forward cache HIT: ${serial} → port ${cachedPort} (instan)`);
-            return cachedPort;
+            const client = AdbExtended.createClient();
+            const forwards = await client.listForwards(serial);
+            const stillActive = forwards.find((item: Forward) =>
+                item.local === `tcp:${cachedPort}` && item.remote === remote && item.serial === serial,
+            );
+            if (stillActive) {
+                console.log(`[AdbUtils] forward cache HIT (verified): ${serial} → port ${cachedPort}`);
+                return cachedPort;
+            }
+            // Forward sudah hilang (device reconnect / adb restart) — hapus cache
+            console.warn(`[AdbUtils] forward cache STALE: ${serial} port ${cachedPort} no longer active, re-creating...`);
+            this.forwardCache.delete(cacheKey);
         }
 
         console.log(`[AdbUtils] forward cache MISS: ${serial}, checking ADB forwards...`);
 
         // 2. Cache miss: cek apakah ADB sudah punya forward aktif (eg. server restart)
-        const client = AdbExtended.createClient();
-        const forwards = await client.listForwards(serial);
+        const clientCheck = AdbExtended.createClient();
+        const forwards = await clientCheck.listForwards(serial);
         const existing = forwards.find((item: Forward) => {
             return item.remote === remote && item.local.startsWith('tcp:') && item.serial === serial;
         });
         if (existing) {
             const port = parseInt(existing.local.split('tcp:')[1], 10);
             console.log(`[AdbUtils] Reusing existing ADB forward: ${serial} → port ${port}`);
-            // Simpan ke cache agar request berikutnya instan
             this.forwardCache.set(cacheKey, port);
             return port;
         }
 
-        // 3. Belum ada forward sama sekali: buat baru
-        const port = await portfinder.getPortPromise();
-        const local = `tcp:${port}`;
-        await client.forward(serial, local, remote);
-        console.log(`[AdbUtils] Created new ADB forward: ${serial} ${local} → ${remote} (port ${port})`);
+        // 3. Buat forward baru — SERIALIZED via mutex agar portfinder tidak
+        //    dipanggil concurrent oleh banyak device (race condition → port duplikat)
+        const port = await new Promise<number>((resolve, reject) => {
+            this.portAllocMutex = this.portAllocMutex
+                .then(async () => {
+                    const p = await portfinder.getPortPromise();
+                    const local = `tcp:${p}`;
+                    const client = AdbExtended.createClient();
+                    await client.forward(serial, local, remote);
+                    console.log(`[AdbUtils] Created new ADB forward: ${serial} ${local} → ${remote} (port ${p})`);
+                    this.forwardCache.set(cacheKey, p);
+                    resolve(p);
+                })
+                .catch((e) => {
+                    reject(e);
+                });
+        });
 
-        // 4. Simpan ke cache
-        this.forwardCache.set(cacheKey, port);
         return port;
     }
 

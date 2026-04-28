@@ -60,6 +60,11 @@ export class ScrcpyServer {
                         params.lookPidFile = false;
                     }
                 }
+            } else if (tryCounter >= 2) {
+                // PID file tidak muncul setelah 2 attempt — server mungkin tidak
+                // menulis PID file (custom JAR). Fallback ke process detection.
+                Logger.warn(TAG, `[${device.udid}] PID file not found after ${tryCounter + 1} attempts, switching to process detection`);
+                params.lookPidFile = false;
             }
         } else {
             const list = await this.getServerPid(device);
