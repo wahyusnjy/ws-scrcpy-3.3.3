@@ -40,6 +40,7 @@ export class Multiplexer extends TypedEmitter<MultiplexerEvents> implements WebS
     private nextId = 0;
     private maxId = 4294967296;
     private storage: Array<string | ArrayBufferLike | Blob | ArrayBufferView> = [];
+    private static readonly MAX_STORAGE_SIZE = 1000;
     private readonly messageEmitter: WebsocketEventEmitter;
     private emptyTimerScheduled = false;
 
@@ -70,6 +71,11 @@ export class Multiplexer extends TypedEmitter<MultiplexerEvents> implements WebS
         const onCloseHandler = (event: CloseEvent) => {
             this.readyState = this.ws.readyState;
             this.dispatchEvent(event);
+            this.channels.forEach(({ channel }) => {
+                if (channel.readyState !== channel.CLOSED && channel.readyState !== channel.CLOSING) {
+                    channel.close(event.code, event.reason);
+                }
+            });
             this.channels.clear();
         };
 
@@ -194,7 +200,7 @@ export class Multiplexer extends TypedEmitter<MultiplexerEvents> implements WebS
     }
 
     public get bufferedAmount(): number {
-        return 0;
+        return this.ws.bufferedAmount;
     }
 
     public get extensions(): string {
@@ -278,6 +284,9 @@ export class Multiplexer extends TypedEmitter<MultiplexerEvents> implements WebS
                 this.ws.send(data);
             }
         } else if (readyState === this.ws.CONNECTING) {
+            if (this.storage.length >= Multiplexer.MAX_STORAGE_SIZE) {
+                this.storage.shift();
+            }
             this.storage.push(data);
         } else {
             throw Error(`Socket is already in CLOSING or CLOSED state.`);

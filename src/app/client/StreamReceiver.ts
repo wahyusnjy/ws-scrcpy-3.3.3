@@ -45,6 +45,8 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
     private readonly screenInfoMap: Map<number, ScreenInfo> = new Map();
     private readonly videoSettingsMap: Map<number, VideoSettings> = new Map();
     private hasInitialInfo = false;
+    private openTimestamp = 0;
+    private firstVideoTimestamp = 0;
     // cachedConfigFrames DIHAPUS: custom WSServer.java sudah handle server-side
     // via sendCodecMetadataToClient() + WS-KeyframeRetry thread
 
@@ -177,6 +179,12 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
             }
             const data = event.data as ArrayBuffer;
 
+            if (this.firstVideoTimestamp === 0) {
+                this.firstVideoTimestamp = Date.now();
+                const handshakeDuration = this.firstVideoTimestamp - this.openTimestamp;
+                console.log(`${TAG} [Handshake] Duration: ${handshakeDuration}ms (Open → First Video)`);
+            }
+
             // Custom WSServer.java mengirim raw NAL units (Annex B, dengan start code).
             // TIDAK ada pts/size metadata wrapper (sendFrameMeta tidak diimplementasikan
             // di server kami). Langsung emit sebagai video frame.
@@ -186,6 +194,8 @@ export class StreamReceiver<P extends ParamsStream> extends ManagerClient<Params
     }
 
     protected onSocketOpen(): void {
+        this.openTimestamp = Date.now();
+        this.firstVideoTimestamp = 0;
         this.emit('connected', void 0);
 
         // ⚠️ JANGAN replay cachedConfigFrames di sini!

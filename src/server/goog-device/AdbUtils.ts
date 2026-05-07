@@ -187,14 +187,17 @@ export class AdbUtils {
 
         // 3. Buat forward baru — SERIALIZED via mutex agar portfinder tidak
         //    dipanggil concurrent oleh banyak device (race condition → port duplikat)
+        const start = Date.now();
         const port = await new Promise<number>((resolve, reject) => {
             this.portAllocMutex = this.portAllocMutex
                 .then(async () => {
+                    const mutexStart = Date.now();
                     const p = await portfinder.getPortPromise();
                     const local = `tcp:${p}`;
                     const client = AdbExtended.createClient();
                     await client.forward(serial, local, remote);
-                    console.log(`[AdbUtils] Created new ADB forward: ${serial} ${local} → ${remote} (port ${p})`);
+                    const duration = Date.now() - mutexStart;
+                    console.log(`[AdbUtils] Created new ADB forward: ${serial} ${local} → ${remote} (port ${p}) in ${duration}ms`);
                     this.forwardCache.set(cacheKey, p);
                     resolve(p);
                 })
@@ -202,6 +205,10 @@ export class AdbUtils {
                     reject(e);
                 });
         });
+        const totalDuration = Date.now() - start;
+        if (totalDuration > 1000) {
+            console.warn(`[AdbUtils] HIGH LATENCY: forward took ${totalDuration}ms for ${serial}`);
+        }
 
         return port;
     }

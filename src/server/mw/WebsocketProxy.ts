@@ -8,6 +8,10 @@ export class WebsocketProxy extends Mw {
     private remoteSocket?: WS;
     private released = false;
     private storage: WS.MessageEvent[] = [];
+    private static readonly MAX_STORAGE_SIZE = 1000;
+    private lastFrameTime = 0;
+    private static readonly STALL_THRESHOLD = 500;
+    private static readonly MAX_BUFFERED_AMOUNT = 2 * 1024 * 1024; // 2MB
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public static processRequest(ws: WS, params: RequestParameters): WebsocketProxy | undefined {
@@ -45,7 +49,24 @@ export class WebsocketProxy extends Mw {
             this.flush();
         };
         remoteSocket.onmessage = (event) => {
+            const now = Date.now();
+            if (this.lastFrameTime > 0) {
+                const interval = now - this.lastFrameTime;
+                if (interval > WebsocketProxy.STALL_THRESHOLD) {
+                    console.warn(`${this.name} [Stall] Frame interval: ${interval}ms`);
+                }
+            }
+            this.lastFrameTime = now;
+
             if (this.ws && this.ws.readyState === this.ws.OPEN) {
+                // Socket Backpressure check
+                const bufferedAmount = (this.ws as any).bufferedAmount || 0;
+                if (bufferedAmount > WebsocketProxy.MAX_BUFFERED_AMOUNT) {
+                    // Drop frame if buffer is too full to prevent accumulation of delay
+                    // console.warn(`${this.name} [Drop] Buffer full (${bufferedAmount} bytes), dropping frame`);
+                    return;
+                }
+
                 if (Array.isArray(event.data)) {
                     event.data.forEach((data) => this.ws.send(data));
                 } else {
@@ -84,6 +105,9 @@ export class WebsocketProxy extends Mw {
         if (this.remoteSocket) {
             this.remoteSocket.send(event.data);
         } else {
+            if (this.storage.length >= WebsocketProxy.MAX_STORAGE_SIZE) {
+                this.storage.shift();
+            }
             this.storage.push(event);
         }
     }

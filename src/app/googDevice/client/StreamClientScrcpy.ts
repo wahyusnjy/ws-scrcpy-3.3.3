@@ -37,6 +37,7 @@ type StartParams = {
     player?: BasePlayer;
     fitToScreen?: boolean;
     videoSettings?: VideoSettings;
+    parent?: HTMLElement;
 };
 
 const TAG = '[StreamClientScrcpy]';
@@ -102,12 +103,13 @@ export class StreamClientScrcpy
         player?: BasePlayer,
         fitToScreen?: boolean,
         videoSettings?: VideoSettings,
+        parent?: HTMLElement,
     ): StreamClientScrcpy {
         if (query instanceof URLSearchParams) {
             const params = StreamClientScrcpy.parseParameters(query);
-            return new StreamClientScrcpy(params, streamReceiver, player, fitToScreen, videoSettings);
+            return new StreamClientScrcpy(params, streamReceiver, player, fitToScreen, videoSettings, parent);
         } else {
-            return new StreamClientScrcpy(query, streamReceiver, player, fitToScreen, videoSettings);
+            return new StreamClientScrcpy(query, streamReceiver, player, fitToScreen, videoSettings, parent);
         }
     }
 
@@ -132,6 +134,7 @@ export class StreamClientScrcpy
         player?: BasePlayer,
         fitToScreen?: boolean,
         videoSettings?: VideoSettings,
+        private parent?: HTMLElement,
     ) {
         super(params);
         if (streamReceiver) {
@@ -141,7 +144,7 @@ export class StreamClientScrcpy
         }
 
         const { udid, player: playerName } = this.params;
-        this.startStream({ udid, player, playerName, fitToScreen, videoSettings });
+        this.startStream({ udid, player, playerName, fitToScreen, videoSettings, parent });
         this.setBodyClass('stream');
     }
 
@@ -367,7 +370,8 @@ export class StreamClientScrcpy
         player.setParent(video);
         player.pause();
 
-        document.body.appendChild(deviceView);
+        const parent = this.parent || document.body;
+        parent.appendChild(deviceView);
         if (fitToScreen) {
             const newBounds = this.getMaxSize();
             if (newBounds) {
