@@ -153,24 +153,15 @@ export class AdbUtils {
     public static async forward(serial: string, remote: string): Promise<number> {
         const cacheKey = `${serial}|${remote}`;
 
-        // 1. Cache hit: validasi dulu bahwa forward masih aktif di ADB
+        // 1. Trust-First Cache: Jika ada di memori, langsung kembalikan port-nya.
+        // Tidak lagi memanggil 'adb forward --list' untuk verifikasi (penyebab bottleneck).
         if (this.forwardCache.has(cacheKey)) {
             const cachedPort = this.forwardCache.get(cacheKey)!;
-            const client = AdbExtended.createClient();
-            const forwards = await client.listForwards(serial);
-            const stillActive = forwards.find((item: Forward) =>
-                item.local === `tcp:${cachedPort}` && item.remote === remote && item.serial === serial,
-            );
-            if (stillActive) {
-                console.log(`[AdbUtils] forward cache HIT (verified): ${serial} → port ${cachedPort}`);
-                return cachedPort;
-            }
-            // Forward sudah hilang (device reconnect / adb restart) — hapus cache
-            console.warn(`[AdbUtils] forward cache STALE: ${serial} port ${cachedPort} no longer active, re-creating...`);
-            this.forwardCache.delete(cacheKey);
+            console.log(`[${serial}] [AdbUtils] Cache HIT: Trusting cached port ${cachedPort} (Zero ADB latency)`);
+            return cachedPort;
         }
 
-        console.log(`[AdbUtils] forward cache MISS: ${serial}, checking ADB forwards...`);
+        console.log(`[${serial}] [AdbUtils] Cache MISS: checking ADB server for existing forwards...`);
 
         // 2. Cache miss: cek apakah ADB sudah punya forward aktif (eg. server restart)
         const clientCheck = AdbExtended.createClient();
@@ -180,7 +171,7 @@ export class AdbUtils {
         });
         if (existing) {
             const port = parseInt(existing.local.split('tcp:')[1], 10);
-            console.log(`[AdbUtils] Reusing existing ADB forward: ${serial} → port ${port}`);
+            console.log(`[${serial}] [AdbUtils] Reusing existing ADB forward found on port ${port}`);
             this.forwardCache.set(cacheKey, port);
             return port;
         }
@@ -197,7 +188,7 @@ export class AdbUtils {
                     const client = AdbExtended.createClient();
                     await client.forward(serial, local, remote);
                     const duration = Date.now() - mutexStart;
-                    console.log(`[AdbUtils] Created new ADB forward: ${serial} ${local} → ${remote} (port ${p}) in ${duration}ms`);
+                    console.log(`[${serial}] [AdbUtils] ✓ Created NEW ADB forward on port ${p} (Latency: ${duration}ms)`);
                     this.forwardCache.set(cacheKey, p);
                     resolve(p);
                 })
