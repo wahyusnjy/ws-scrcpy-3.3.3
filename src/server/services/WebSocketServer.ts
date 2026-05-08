@@ -39,6 +39,11 @@ export class WebSocketServer implements Service {
             }
             const url = new URL(request.url, 'https://example.org/');
             const action = url.searchParams.get('action') || '';
+
+            // Disable Nagle's Algorithm for snappy input (clicks/swipes)
+            if (request.socket) {
+                request.socket.setNoDelay(true);
+            }
             let processed = false;
             for (const mwFactory of this.mwFactories.values()) {
                 const service = mwFactory.processRequest(ws, { action, request, url });

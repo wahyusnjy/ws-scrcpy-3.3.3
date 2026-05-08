@@ -44,6 +44,11 @@ export class WebsocketProxy extends Mw {
     public async init(remoteUrl: string): Promise<void> {
         this.name = `[${WebsocketProxy.TAG}{$${remoteUrl}}]`;
         const remoteSocket = new WS(remoteUrl);
+        remoteSocket.on('upgrade', (res) => {
+            if (res.socket) {
+                res.socket.setNoDelay(true);
+            }
+        });
         remoteSocket.onopen = () => {
             this.remoteSocket = remoteSocket;
             this.flush();

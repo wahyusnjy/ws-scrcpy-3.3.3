@@ -73,8 +73,8 @@ export class ScrcpyServer {
                 return list;
             }
         }
-        if (++params.tryCounter > 5) {
-            Logger.error(TAG, `[${device.udid}] ✗ TIMEOUT: Failed to start server after 5 attempts`);
+        if (++params.tryCounter > 10) {
+            Logger.error(TAG, `[${device.udid}] ✗ TIMEOUT: Failed to start server after 10 attempts`);
             throw new Error('Failed to start server - timeout waiting for PID');
         }
         return new Promise<number[] | undefined>((resolve) => {
