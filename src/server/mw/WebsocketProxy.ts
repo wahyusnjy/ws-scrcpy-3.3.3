@@ -12,6 +12,8 @@ export class WebsocketProxy extends Mw {
     private lastFrameTime = 0;
     private static readonly STALL_THRESHOLD = 500;
     private static readonly MAX_BUFFERED_AMOUNT = 2 * 1024 * 1024; // 2MB
+    private dropCount = 0;
+    private totalDropCount = 0;
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public static processRequest(ws: WS, params: RequestParameters): WebsocketProxy | undefined {
@@ -67,9 +69,21 @@ export class WebsocketProxy extends Mw {
                 // Socket Backpressure check
                 const bufferedAmount = (this.ws as any).bufferedAmount || 0;
                 if (bufferedAmount > WebsocketProxy.MAX_BUFFERED_AMOUNT) {
-                    // Drop frame if buffer is too full to prevent accumulation of delay
-                    // console.warn(`${this.name} [Drop] Buffer full (${bufferedAmount} bytes), dropping frame`);
-                    return;
+                    // Cek tipe NAL Unit: JANGAN buang Keyframe (SPS/PPS/IDR)
+                    if (this.isKeyFrame(event.data)) {
+                        if (this.dropCount > 0) {
+                            console.warn(`${this.name} [Backpressure] Dropped ${this.dropCount} P-Frames to clear buffer. Sending mandatory Keyframe now.`);
+                            this.dropCount = 0;
+                        }
+                    } else {
+                        // Drop frame biner biasa (P-Frame) untuk mencegah penumpukan delay
+                        this.dropCount++;
+                        this.totalDropCount++;
+                        if (this.dropCount % 100 === 0) {
+                            console.log(`${this.name} [Backpressure] Currently dropping frames (${this.dropCount} in current streak, total: ${this.totalDropCount})`);
+                        }
+                        return;
+                    }
                 }
 
                 if (Array.isArray(event.data)) {
@@ -121,8 +135,34 @@ export class WebsocketProxy extends Mw {
         if (this.released) {
             return;
         }
+        if (this.totalDropCount > 0) {
+            console.log(`${this.name} [Final Stats] Connection closed. Total frames dropped: ${this.totalDropCount}`);
+        }
         super.release();
         this.released = true;
         this.flush();
+    }
+
+    private isKeyFrame(data: any): boolean {
+        const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+        let offset = 0;
+
+        // Skip Annex B start code (00 00 00 01 atau 00 00 01)
+        if (buffer.length > 4 && buffer[0] === 0 && buffer[1] === 0 && buffer[2] === 0 && buffer[3] === 1) {
+            offset = 4;
+        } else if (buffer.length > 3 && buffer[0] === 0 && buffer[1] === 0 && buffer[2] === 1) {
+            offset = 3;
+        }
+
+        if (buffer.length <= offset) return false;
+
+        // NAL Header byte: [F(1) | NRI(2) | Type(5)]
+        const type = buffer[offset] & 0x1f;
+
+        // Critical NAL Types:
+        // 5: IDR (Coded slice of an IDR picture) - KEYFRAME
+        // 7: SPS (Sequence Parameter Set) - METADATA
+        // 8: PPS (Picture Parameter Set) - METADATA
+        return type === 5 || type === 7 || type === 8;
     }
 }
