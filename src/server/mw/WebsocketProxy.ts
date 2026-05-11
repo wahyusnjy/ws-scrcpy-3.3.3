@@ -14,6 +14,8 @@ export class WebsocketProxy extends Mw {
     private static readonly MAX_BUFFERED_AMOUNT = 2 * 1024 * 1024; // 2MB
     private dropCount = 0;
     private totalDropCount = 0;
+    private static connectionMutex: Promise<void> = Promise.resolve();
+    private static readonly CONNECTION_DELAY = 250; // 250ms delay antar HP
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     public static processRequest(ws: WS, params: RequestParameters): WebsocketProxy | undefined {
@@ -45,6 +47,12 @@ export class WebsocketProxy extends Mw {
 
     public async init(remoteUrl: string): Promise<void> {
         this.name = `[${WebsocketProxy.TAG}{$${remoteUrl}}]`;
+
+        // Connection Pacing: Jangan buka 30 jalur USB sekaligus
+        await (WebsocketProxy.connectionMutex = WebsocketProxy.connectionMutex.then(async () => {
+            await new Promise((resolve) => setTimeout(resolve, WebsocketProxy.CONNECTION_DELAY));
+        }));
+
         const remoteSocket = new WS(remoteUrl);
         remoteSocket.on('upgrade', (res) => {
             if (res.socket) {
@@ -54,6 +62,17 @@ export class WebsocketProxy extends Mw {
         remoteSocket.onopen = () => {
             this.remoteSocket = remoteSocket;
             this.flush();
+
+            // Auto-Trigger (Virtual Kick): Paksa HP kirim I-Frame setelah 1.5 detik
+            setTimeout(() => {
+                if (!this.released && this.remoteSocket && this.remoteSocket.readyState === WS.OPEN) {
+                    console.log(`${this.name} [Virtual Kick] Triggering I-Frame to wake up stream...`);
+                    // Mengirim ControlMessage TYPE_CHANGE_STREAM_PARAMETERS (101) 
+                    // dengan payload minimal akan memaksa encoder scrcpy untuk restart & kirim I-Frame.
+                    const kickMsg = Buffer.from([101, 0, 0, 0, 0, 0, 0, 0, 0]); 
+                    this.remoteSocket.send(kickMsg);
+                }
+            }, 1500);
         };
         remoteSocket.onmessage = (event) => {
             const now = Date.now();
